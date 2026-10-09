@@ -11,3 +11,8 @@ My Computer Vision Project
     int iInlier, iResult = Ransac_E(Match_Point[0], Match_Point[1], 200, T, E, 1);
     iInlier = Get_Inlier_Count(Match_Point[0], Match_Point[1], 200, T, 1, 2, &fError);
    
+3，4点法估计H矩阵
+
+    int iResult = Ransac_H<_T>(Match_Point[0], Match_Point[1], 200, T, H, eps);
+    iInlier = Get_Inlier_Count(Match_Point[0], Match_Point[1], 200, T, 1, 2, &fError, eps);
+    
