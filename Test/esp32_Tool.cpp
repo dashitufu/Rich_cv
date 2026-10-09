@@ -40,6 +40,7 @@ void Rotate_Cam(int iDir, float fDelta, const char IP[], int iPort)
 	iCmd_Rotate_Cam_Client(iSocket, iDir, fDelta);
 	Close_Socket(iSocket);
 }
+
 void Rotate_Cam(char Dir[], char Delta[], const char IP[], int iPort)
 {//旋转镜头, 0: 水平， 1：垂直
 	int iDir;

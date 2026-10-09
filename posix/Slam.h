@@ -105,14 +105,21 @@ template<typename _T>int Estimate_E_T_5Point(_T Point_A[5][2], _T Point_B[5][2],
 template<typename _T>int Estimate_E_8Point(_T Point_A[8][2], _T Point_B[8][2], _T T[3 * 4], _T E[3 * 3]);
 template<typename _T>int Estimate_F_7Point(_T Point_A[7][2], _T Point_B[7][2], _T F[3][3 * 3], int* piCount=NULL);
 template<typename _T>int Estimate_F_8Point(_T Point_A[8][2], _T Point_B[8][2], _T F[3 * 3]);
-template<typename _T>int Estimate_H_4Point(_T Point_A[4][2], _T Point_B[4][2], _T T[3 * 4], _T H[3 * 3]=NULL);
+template<typename _T>int Estimate_H_4Point(_T Point_A[4][2], _T Point_B[4][2], _T T[3 * 4]=NULL, _T H[3 * 3]=NULL, _T *pfError=NULL);
 template<typename _T>int Estimate_E_T_nPoint(_T Point_A[5][2], _T Point_B[5][2], int iCount, int* piInlier, _T T[3 * 4] = NULL, _T E[3 * 3] = NULL);
-template<typename _T>int Elect_R_t(_T Point_A[5][2], _T Point_B[5][2], int iPoint_Count,
-	_T R[][3 * 3], _T t[][3], int iRt_Count, int* piBest_E_Index, _T* pfError=NULL);
+template<typename _T>int Elect_R_t(_T Point_A[5][2], _T Point_B[5][2], int iPoint_Count, _T R[][3 * 3], _T t[][3], int iRt_Count, int* piBest_E_Index, _T* pfError=NULL);
 template<typename _T>int Elect_E(_T Point_A[5][2], _T Point_B[5][2], _T E[][3 * 3], int iCount, _T Best_T[3 * 4], int iSample_Count, int* piBest_E_Index);
 template<typename _T>_T Sampson(_T x1[2], _T x2[2], _T E[3 * 3]);	//«ÛSampsonæ‡¿Î
 template<typename _T>int Ransac_E(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], _T E[3 * 3], int bUse_5_Point = 1, int bPoint_In_Place = 1);
-template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], int bSwap_Inlier_Forward = 1, int iMethod = 2, _T* pfError = NULL);
+template<typename _T>int Ransac_H(_T Point_A[][2], _T Point_B[][2], int iCount,	_T T[3 * 4], _T H[3 * 3], int bPoint_In_Place = 0, _T eps = 0.0004);
+
+template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], int bSwap_Inlier_Forward = 1, int iMethod = 2,
+	_T* pfError = NULL, _T eps = 0.005208333333333333f * 0.005208333333333333);
+template<typename _T>void Sample_XY(_T Point_A[][2], _T Point_B[][2], int iPoint_Count, int iSample_Count);
+//int Ransac_Remain_Count(int iInlier, int iSample_Count, int iMin_Sample_Count);
+//template<typename _T>void Gen_H_Coeff_row(_T P1[2], _T P2[2], _T row[2 * 9]);
+//template<typename _T>void H_2_R_t(_T H[3 * 3], _T R[4][3 * 3], _T t[4][3], _T n[4][3] = NULL);
+
 //»˝Ω«ªØ
 template<typename _T>int Triangulate_Cramer(_T Pn1[3], _T Pn2[3], _T T[4 * 4], _T P[3]);
 template<typename _T>int Triangulate_Gauss(_T Pn1[3], _T Pn2[3], _T T1[4 * 4], _T T2[4 * 4], _T P[3]);

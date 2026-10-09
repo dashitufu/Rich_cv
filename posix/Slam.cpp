@@ -2394,7 +2394,8 @@ template<typename _T>int Estimate_F_8Point(_T Point_A[8][2], _T Point_B[8][2], _
 	return 1;
 }
 
-template<typename _T>static void Gen_H_Coeff_row(_T P1[2], _T P2[2], _T row[2 * 9])
+//template void Gen_H_Coeff_row(double P1[2], double P2[2], double row[2 * 9]);
+template<typename _T>void Gen_H_Coeff_row(_T P1[2], _T P2[2], _T row[2 * 9])
 {//构造   uv2' x H * uv1 中的一行
 	//此时，uv1, uv2 用的是齐次坐标，刚好等于归一化平面上的位姿看成空间点
 	_T row_1[2 * 9] = { 0,0,0,-P1[0],-P1[1],-1,P1[0] * P2[1],P1[1] * P2[1],P2[1],
@@ -2429,7 +2430,8 @@ template<typename _T>_T Test_H(_T H[3 * 3], _T Point_A[][2], _T Point_B[][2], in
 	return fError_Sum;
 }
 
-template<typename _T>void H_2_R_t(_T H[3 * 3], _T R[4][3 * 3], _T t[4][3], _T n[4][3] = NULL)
+//template void H_2_R_t(double H[3 * 3], double R[4][3 * 3], double t[4][3], double n[4][3]);
+template<typename _T>void H_2_R_t(_T H[3 * 3], _T R[4][3 * 3], _T t[4][3], _T n[4][3])
 {//理论上，一个H可以分解出4组R,t，还得进一步验最优解
 	//首先，对H进行svd分解
 	_T U[3 * 3], S[3], Vt[3 * 3];
@@ -2448,6 +2450,7 @@ template<typename _T>void H_2_R_t(_T H[3 * 3], _T R[4][3 * 3], _T t[4][3], _T n[
 	n3 = (1 - lambda_sqr[2]) / (lambda_sqr[0] - lambda_sqr[2]);
 	x1 = sqrt(n1);
 	x3 = sqrt(n3);
+
 	//printf("x1:%e x3:%f\n", x1, x3);
 	n[0][1] = n[1][1] = n[2][1] = n[3][1] = 0;
 	n[0][0] = x1, n[0][2] = x3;
@@ -2500,9 +2503,9 @@ template<typename _T>void H_2_R_t(_T H[3 * 3], _T R[4][3 * 3], _T t[4][3], _T n[
 
 		Matrix_Multiply_3x1(U, t[i], t[i]);
 		Matrix_Multiply(n[i], 1, 3, Vt, 3, n[i]);
-		//Disp(R[i], 3, 3, "R");
-		//Disp(t[i], 1, 3, "t");
-		//Disp(n[i], 1, 3, "n");
+		/*Disp(R[i], 3, 3, "R");
+		Disp(t[i], 1, 3, "t");
+		Disp(n[i], 1, 3, "n");*/
 	}
 
 	return;
@@ -2521,9 +2524,14 @@ template<typename _T>int Elect_R_t(_T Point_A[5][2], _T Point_B[5][2], int iPoin
 
 		_T T[3 * 4], P[4];
 		Gen_Pose_By_R_t(R[k], t[k], T, 0);
+		/*if(k==3)
+		Disp(T, 3, 4, "T");*/
 		for (int j = 0; j < iPoint_Count; j++)
 		{
 			Triangulate_Cramer<_T>(Point_A[j], Point_B[j], T, P);
+			Triangulate_Gauss<_T>(Point_A[j], Point_B[j], NULL, T, P);
+			//if (k == 3 && j == 2)
+				//Disp(P, 3, 1, "P");
 			if (P[2] <= 0)
 			{
 				bInvalid = 1;
@@ -2548,13 +2556,16 @@ template<typename _T>int Elect_R_t(_T Point_A[5][2], _T Point_B[5][2], int iPoin
 			}
 		}
 	}
+
 	if (pfError)
 		*pfError = fBest_Error;
+	if (fBest_Error == MAX_FLOAT)
+		bFound = 0;
 	return !!bFound;
 }
 
-template int Estimate_H_4Point(double Point_A[4][2], double Point_B[4][2], double T[3 * 4], double H[3 * 3]);
-template<typename _T>int Estimate_H_4Point(_T Point_A[4][2], _T Point_B[4][2], _T T[3 * 4], _T H[3 * 3])
+template int Estimate_H_4Point(double Point_A[4][2], double Point_B[4][2], double T[3 * 4], double H[3 * 3], double* pfError);
+template<typename _T>int Estimate_H_4Point(_T Point_A[4][2], _T Point_B[4][2], _T T[3 * 4], _T H[3 * 3],_T *pfError)
 {//一般空间平面点求解H矩阵，理论上既可以算归一化平面，也可以算像素平面的点
 	union {
 		_T A[8 * 9];
@@ -2579,24 +2590,26 @@ template<typename _T>int Estimate_H_4Point(_T Point_A[4][2], _T Point_B[4][2], _
 	//如果两个相机之间的位移为2，那么真实位移为 t = t1/|t1| * 2
 	_T R[4][3 * 3], t[4][3], n[4][3];
 	H_2_R_t(x, R, t, n);
+	
 
 	//接着还要三角化验算一把
 	//注意，三角化的P点位置也只是尺度不确定未知，
 	//要量出两相机之间的距离s 后，P = P * s/|t1| 才是
 	//真实位置
 	int iBest_Index;
-	if (!(iResult = Elect_R_t(Point_A, Point_B, 4, R, t, 4, &iBest_Index)))
+	if (!(iResult = Elect_R_t(Point_A, Point_B, 4, R, t, 4, &iBest_Index,pfError)))
 		return 0;
 
 	if (T)
 		Gen_Pose_By_R_t(R[iBest_Index], t[iBest_Index], T, 0);
+
 	if (H)
 	{   //H' 	= R + t1 * n'
 		Matrix_Multiply(t[iBest_Index], 3, 1, n[iBest_Index], 3, H);
 		Vector_Add(R[iBest_Index], H, 3 * 3, H);
 
-		////H 矩阵归一化，非必要
-		//Vector_Multiply(H, 9, 1 / H[8], H);
+		//H 矩阵归一化，非必要
+		Vector_Multiply(H, 9, 1 / H[8], H);
 
 		//printf("Error:%e\n", Test_H(H, Point_A, Point_B, 4));
 		//Disp(H, 3, 3, "H");
@@ -2630,7 +2643,7 @@ template<typename _T>_T Sampson(_T x1[][2], _T x2[][2], int iCount, _T E[3 * 3])
 		fError += Sampson(x1[i], x2[i], E);
 	return fError;
 }
-
+template void Sample_XY(double Point_A[][2], double Point_B[][2], int iPoint_Count, int iSample_Count);
 template<typename _T>void Sample_XY(_T Point_A[][2], _T Point_B[][2], int iPoint_Count, int iSample_Count)
 {//随机升起点对
 	//出去以后，头iSample_Count 个点对必然是随机生成点对
@@ -2701,8 +2714,8 @@ int Ransac_Remain_Count(int iInlier, int iSample_Count, int iMin_Sample_Count)
 	return k;
 }
 
-template int Get_Inlier_Count(double Point_A[][2], double Point_B[][2], int iCount, double T[3 * 4], int bSwap_Inlier_Forward, int iMethod, double* pfError);
-template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], int bSwap_Inlier_Forward, int iMethod, _T* pfError)
+template int Get_Inlier_Count(double Point_A[][2], double Point_B[][2], int iCount, double T[3 * 4], int bSwap_Inlier_Forward, int iMethod, double* pfError, double eps);
+template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], int bSwap_Inlier_Forward, int iMethod, _T* pfError, _T eps)
 {//对一堆点对就T进行三角化，算出内殿数量
 //三角化方法：0：DLT        SVD法
 //            1: Cramer     克莱姆法
@@ -2712,6 +2725,9 @@ template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int 
 	int iInlier, j;
 	for (j = 0, iInlier = 0; j < iCount; j++)
 	{
+		/*if ( abs(Point_B[j][0]- -0.787080)<0.0001)
+			printf("here");*/
+
 		_T P[3], P2[3];
 		if (iMethod == 0)
 			Triangulate_DLT<_T>(Point_A[j], Point_B[j], NULL, T, P);
@@ -2730,8 +2746,10 @@ template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int 
 			continue;
 
 		fError = Test_Triangulate(P, T, Point_A[j], Point_B[j]);
+		if (fError > eps)
+			continue;
+		//printf("Error:%f\n", fError);
 		fError_Sum += fError;
-
 		if (bSwap_Inlier_Forward)
 		{
 			//SWAP 到前面
@@ -2765,30 +2783,30 @@ template<typename _T>int Ransac_E(_T Point_A[][2], _T Point_B[][2], int iCount,
 		memcpy(pDup_Point_B, Point_B, iCount * 2 * sizeof(_T));
 	}
 
-	const int iMax_Seq_Dup_Trail = 20;
+	const int iMax_Seq_Dup_Trail = 20, iHalf_Count = (iCount + 1) >> 1;
 	const _T eps = 0.005208333333333333f * 0.005208333333333333f;
 
 	int iIter, iRemain_Iter_Count = 0xFFFFFF, iSeq_Dup_Max_Inlier = 0;
 
 	int iResult, iInlier, iMax_Inlier = 0, iSample_Count = bUse_5_Point ? 5 : 8;
 	_T fError, fMin_Error = MAX_FLOAT;
-	_T Best_E[3 * 3], Best_T[3 * 4], E1[3 * 3];
+	_T Best_E[3 * 3], T1[3 * 4], E1[3 * 3];
 
 	//******************第一步，粗估计**********************************************************/
-	for (iIter = 0; iIter < iRemain_Iter_Count && iSeq_Dup_Max_Inlier < iMax_Seq_Dup_Trail; iIter++)
+	for (iIter = 0; iIter < iRemain_Iter_Count && 
+		iMax_Inlier< iHalf_Count &&			//良性数据能加快跳出
+		iSeq_Dup_Max_Inlier < iMax_Seq_Dup_Trail; iIter++)
 	{
 		//随机选出一组点对
 		Sample_XY(pDup_Point_A, pDup_Point_B, iCount, iSample_Count);
 
-		_T T[3 * 4];
 		if (bUse_5_Point)
 		{
-			if (!(iResult = Estimate_E_T_5Point(pDup_Point_A, pDup_Point_B, T, E1)))
+			if (!(iResult = Estimate_E_T_5Point(pDup_Point_A, pDup_Point_B, T1, E1)))
 				continue;
-		}
-		else
+		}else
 		{
-			if (!(iResult = Estimate_E_8Point<_T>(pDup_Point_A, pDup_Point_B, T, E1)))
+			if (!(iResult = Estimate_E_8Point<_T>(pDup_Point_A, pDup_Point_B, T1, E1)))
 				continue;
 		}
 
@@ -2804,11 +2822,11 @@ template<typename _T>int Ransac_E(_T Point_A[][2], _T Point_B[][2], int iCount,
 			fMin_Error = fError;
 			iMax_Inlier = iInlier;
 			iSeq_Dup_Max_Inlier = 0;
-			fError = Compute_Squared_Sampson_Error(Best_E, pDup_Point_A, pDup_Point_B, iCount, eps, &iInlier, 0);
+			//fError = Compute_Squared_Sampson_Error(Best_E, pDup_Point_A, pDup_Point_B, iCount, eps, &iInlier, 0);
 		}
 		else if (iPre_Max_Inlier == iMax_Inlier)    //若然连续多次冲不破最大内点数，则跳出
 			iSeq_Dup_Max_Inlier++;
-
+				
 		//printf("Inlier:%d\n", iPre_Max_Inlier);
 		iRemain_Iter_Count = Ransac_Remain_Count(iMax_Inlier, iCount, iSample_Count);
 	}
@@ -2819,24 +2837,271 @@ template<typename _T>int Ransac_E(_T Point_A[][2], _T Point_B[][2], int iCount,
 
 	//******************************第二步，精估计，步步三角化***********************************/
 	iMax_Inlier = 0;
+	fMin_Error = MAX_FLOAT;
 	for (int i = 0; i < 5; i++)
 	{
-		if (!(iResult = Estimate_E_T_nPoint<_T>(pDup_Point_A, pDup_Point_B, iInlier, &iInlier, Best_T, E1)))
+		if (!(iResult = Estimate_E_T_nPoint<_T>(pDup_Point_A, pDup_Point_B, iInlier, &iInlier, T1, E1)))
 			break;
-		iInlier = Get_Inlier_Count(pDup_Point_A, pDup_Point_B, iCount, Best_T, 1, 2, &fError);
+		iInlier = Get_Inlier_Count(pDup_Point_A, pDup_Point_B, iCount, T1, 1, 2, &fError);
 		printf("Inlier:%d average:%f\n", iInlier, fError / iInlier);
-		if (iMax_Inlier < iInlier)
+		if (iMax_Inlier < iInlier ||
+			(iMax_Inlier == iInlier && fMin_Error < fError))
 		{
 			iMax_Inlier = iInlier;
+			fMin_Error = fError;
 			if (T)
-				memcpy(T, Best_T, 3 * 4 * sizeof(_T));
+				memcpy(T, T1, 3 * 4 * sizeof(_T));
 			if (E)
 				memcpy(E, E1, 3 * 3 * sizeof(_T));
-		}
-		/*else
-			break;*/
+		}else
+			break;
 	}
 	//******************************第二步，精估计，步步三角化***********************************/
+
+	if (!bPoint_In_Place)
+		Free(pDup_Point_A);
+	return iMax_Inlier >= iSample_Count ? 1 : 0;
+}
+
+template<typename _T>_T Computer_H_Error(_T H[3 * 3], _T Point_A[2], _T Point_B[2])
+{//返回经过H变换后的欧几里得距离（误差）eps 为阀值
+	_T d0 = H[0 * 3 + 0] * Point_A[0] + H[0 * 3 + 1] * Point_A[1] + H[0 * 3 + 2],
+		d1 = H[1 * 3 + 0] * Point_A[0] + H[1 * 3 + 1] * Point_A[1] + H[1 * 3 + 2],
+		d2 = H[2 * 3 + 0] * Point_A[0] + H[2 * 3 + 1] * Point_A[1] + H[2 * 3 + 2];
+
+	d0 = d0 / d2 - Point_B[0];
+	d1 = d1 / d2 - Point_B[1];
+	return d0 * d0 + d1 * d1;
+}
+
+template<typename _T>_T Computer_H_Error(_T H[3 * 3], _T Point_A[][2], _T Point_B[][2], int iCount, _T eps,
+	int* piInlier_Count = NULL, int bSwap_Inlier_Forward = 1)
+{//测试一群点对经过H 变换后的中体误差
+	_T fError, fError_Sum = 0;
+	int j = 0;
+	for (int i = 0; i < iCount; i++)
+	{
+		/*if ( abs(Point_B[i][0]- 0.388640f)<0.001 ||
+			abs(Point_B[i][0] - 0.812960f) < 0.001 ||
+			abs(Point_B[i][0] - -0.042000) < 0.001 ||
+			abs(Point_B[i][0] - 0.380480f) < 0.001 )
+		{
+			printf("%f %f %f %f\n", Point_A[i][0], Point_A[i][1], Point_B[i][0], Point_B[i][1]);
+		}*/
+
+		fError = Computer_H_Error(H, Point_A[i], Point_B[i]);
+		//printf("i:%d Error:%f\n", i, fError);
+		if (fError < eps)
+		{//及格，将点移前
+			if (bSwap_Inlier_Forward)
+			{
+				SWAP(_T, Point_A[i][0], Point_A[j][0]);
+				SWAP(_T, Point_A[i][1], Point_A[j][1]);
+				SWAP(_T, Point_B[i][0], Point_B[j][0]);
+				SWAP(_T, Point_B[i][1], Point_B[j][1]);
+			}
+			j++;
+			fError_Sum += fError;
+		}
+	}
+
+	if (piInlier_Count)
+		*piInlier_Count = j;
+
+	return fError_Sum;
+}
+
+template<typename _T>int Estimate_H_nPoint(_T Point_A[5][2], _T Point_B[5][2], int iCount, int* piInlier,
+	_T T[3 * 4] = NULL, _T H[3 * 3] = NULL, _T eps = 0.0002f)
+{
+	int bRet = 0, iInlier, iMax_Inlier = 0, iBest_Index = -1;
+	_T fMin_Error = MAX_FLOAT, fError_Sum, * pA = (_T*)pMalloc(iCount * 2 * 9 * sizeof(_T));
+	if (!pA || iCount < 4)
+		goto END;
+
+	for (int i = 0; i < iCount; i++)
+	{
+		Gen_H_Coeff_row(Point_A[i], Point_B[i], &pA[i * (2 * 9)]);
+		//printf("%f %f %f %f\n", Point_A[i][0], Point_A[i][1], Point_B[i][0], Point_B[i][1]);
+	}
+
+	int iResult;
+	union {
+		_T x[9];
+		_T R1[3 * 3];
+	};
+	Solve_Linear_Contradictory<_T>(pA, iCount * 2, 9, NULL, x, &iResult);
+	if (!iResult)
+		return 0;
+
+	//接着需要分解R,t
+	_T(*T2)[3 * 4], (*n)[3];    //此处应该借空间
+	T2 = (_T(*)[3 * 4])pA;
+	n = (_T(*)[3]) (T2 + 4);
+	{
+		_T R[4][3 * 3], t[4][3];
+		H_2_R_t(x, R, t, n);
+		Gen_Pose_By_R_t<_T>(R[0], t[0], T2[0], 0);
+		Gen_Pose_By_R_t(R[1], t[1], T2[1], 0);
+		Gen_Pose_By_R_t(R[2], t[2], T2[2], 0);
+		Gen_Pose_By_R_t(R[3], t[3], T2[3], 0);
+	}
+
+	//接着还要三角化验算一把
+	//注意，三角化的P点位置也只是尺度不确定未知，
+	//要量出两相机之间的距离s 后，P = P * s/|t1| 才是
+	//真实位置
+	for (int k = 0; k < 4; k++)
+	{
+		fError_Sum = 0; iInlier = 0;
+		_T* pT = T2[k], P[4];
+		for (int j = 0; j < iCount; j++)
+		{
+			Triangulate_Cramer<_T>(Point_A[j], Point_B[j], pT, P);
+			Triangulate_Gauss<_T>(Point_A[j], Point_B[j], NULL, pT, P);;
+			if (P[2] <= 0)
+				continue;
+
+			_T P2[3];
+			TP(pT, P, P2);
+			if (P2[2] <= 0)
+				continue;
+
+			_T  fError = Test_Triangulate(P, pT, Point_A[j], Point_B[j]);
+			if (fError > eps)
+				continue;
+
+			fError_Sum += fError;
+			iInlier++;
+		}
+
+		if (iInlier > iMax_Inlier ||
+			(iInlier == iMax_Inlier && fError_Sum < fMin_Error))
+		{
+			iMax_Inlier = iInlier;
+			iBest_Index = k;
+			fMin_Error = fError_Sum;
+		}
+	}
+
+	if (iBest_Index == -1)
+		goto END;
+	if (piInlier)
+		*piInlier = iMax_Inlier;
+	if (T)
+		memcpy(T, T2[iBest_Index], 3 * 4 * sizeof(_T));
+
+	if (H)
+	{//需要生成一个新的H 矩阵
+		_T* t1 = (_T*)(n + 4),
+			* n1 = t1 + 3;
+		memcpy(n1, n[iBest_Index], 3 * sizeof(_T));
+		Get_R_t(T2[iBest_Index], R1, t1);
+
+		//H' 	= R + t1 * n'
+		Matrix_Multiply(t1, 3, 1, n1, 3, H);
+		Vector_Add(R1, H, 3 * 3, H);
+	}
+
+	bRet = 1;
+END:
+	Free(pA);
+	return bRet;
+}
+template int Ransac_H(double Point_A[][2], double Point_B[][2], int iCount, double T[3 * 4], double H[3 * 3], int bPoint_In_Place, double eps);
+template<typename _T>int Ransac_H(_T Point_A[][2], _T Point_B[][2], int iCount,	_T T[3 * 4], _T H[3 * 3], int bPoint_In_Place, _T eps)
+{
+	//为了不动原来点对，此处要赋值点对
+	_T(*pDup_Point_A)[2], (*pDup_Point_B)[2];
+	if (bPoint_In_Place)
+	{
+		pDup_Point_A = Point_A;
+		pDup_Point_B = Point_B;
+	}
+	else
+	{
+		pDup_Point_A = (_T(*)[2])pMalloc(iCount * 2 * 2 * sizeof(_T));
+		pDup_Point_B = pDup_Point_A + iCount;
+		memcpy(pDup_Point_A, Point_A, iCount * 2 * sizeof(_T));
+		memcpy(pDup_Point_B, Point_B, iCount * 2 * sizeof(_T));
+	}
+
+	const int iMax_Seq_Dup_Trail = 20, iHalf_Count = (iCount + 1) >> 1;
+	//const _T eps = 0.0004;   // 0.005208333333333333f * 0.005208333333333333f;
+
+	int iIter, iRemain_Iter_Count = 0xFFFFFF, iSeq_Dup_Max_Inlier = 0;
+
+	int iResult, iInlier, iMax_Inlier = 0, iSample_Count = 4;
+	_T fError, fMin_Error = MAX_FLOAT;
+	_T Best_H[3 * 3], T1[3 * 4], H1[3 * 3];
+
+	//******************第一步，粗估计**********************************************************/
+	for (iIter = 0; iIter < iRemain_Iter_Count
+		&& iMax_Inlier < iHalf_Count   			//良性数据能加快跳出
+		&& iSeq_Dup_Max_Inlier < iMax_Seq_Dup_Trail; iIter++)
+	{
+		//随机选出一组点对
+		Sample_XY(pDup_Point_A, pDup_Point_B, iCount, iSample_Count);
+		_T T[3 * 4];
+
+		if (!(iResult = Estimate_H_4Point(pDup_Point_A, pDup_Point_B, T, H1)))
+			continue;
+
+		fError = Computer_H_Error(H1, Point_A, Point_B, iCount, eps, &iInlier);
+
+		if (iInlier < iSample_Count)
+			continue;
+
+		int iPre_Max_Inlier = iMax_Inlier;
+		if ((iInlier > iMax_Inlier) ||
+			(iInlier == iMax_Inlier && fError < fMin_Error))
+		{
+			memcpy(Best_H, H1, 3 * 3 * sizeof(_T));
+			memcpy(T1, T, 3 * 4 * sizeof(_T));
+			fMin_Error = fError;
+			iMax_Inlier = iInlier;
+			iSeq_Dup_Max_Inlier = 0;
+		}
+		else if (iPre_Max_Inlier == iMax_Inlier)    //若然连续多次冲不破最大内点数，则跳出
+			iSeq_Dup_Max_Inlier++;
+
+		//printf("Inlier:%d\n", iPre_Max_Inlier);
+		iRemain_Iter_Count = Ransac_Remain_Count(iMax_Inlier, iCount, iSample_Count);
+	}
+	//******************第一步，粗估计**********************************************************/
+
+	//升起全部Inlier
+	fError = Computer_H_Error(Best_H, pDup_Point_A, pDup_Point_B, iCount, eps, &iInlier);
+
+	//用全体三角化方法
+	//iInlier = Get_Inlier_Count(pDup_Point_A, pDup_Point_B, iCount, T1, 1, 2, &fError, eps);
+	//printf("Corse Estimate:%e\n", fError/iInlier);
+
+
+	//******************************第二步，精估计，步步三角化***********************************/
+	iMax_Inlier = -1;
+	fMin_Error = MAX_FLOAT;
+	for (int i = 0; i < 5; i++)
+	{
+		//用及格的点你和H,位姿
+		if (!(iResult = Estimate_H_nPoint(Point_A, Point_B, iInlier, &iInlier, T1, H1, eps)))
+			break;
+
+		iInlier = Get_Inlier_Count(pDup_Point_A, pDup_Point_B, iCount, T1, 1, 2, &fError, eps);
+		printf("Inlier:%d average:%e\n", iInlier, fError / iInlier);
+		if (iMax_Inlier < iInlier ||
+			(iMax_Inlier == iInlier && fError < fMin_Error))
+		{
+			iMax_Inlier = iInlier;
+			fMin_Error = fError;
+			if (T)
+				memcpy(T, T1, 3 * 4 * sizeof(_T));
+			if (H)
+				memcpy(H, H1, 3 * 3 * sizeof(_T));
+		}
+		else
+			break;
+	}
 
 	if (!bPoint_In_Place)
 		Free(pDup_Point_A);

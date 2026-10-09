@@ -1358,7 +1358,7 @@ template<typename _T>int iGet_Rank(_T* A, int m, int n)
 		}
 		if (abs(fMax) < ZERO_APPROCIATE)
 		{//列主元为0，显然不满秩，该方程没有唯一解
-			printf("不满秩,列主元为：%f\n", fMax);
+			//printf("不满秩,列主元为：%f\n", fMax);
 			Disp(Ai, m, n, "Ai");
 			continue;
 		}
@@ -1609,7 +1609,7 @@ template<typename _T>int Elementary_Row_Op_AAt(_T Ai[], int iOrder,_T X[])
 		_T fPivot = *pfPivot_Row;
 		if (abs(fPivot) < eps)
 		{//列主元为0，显然不满秩，该方程没有唯一解
-			printf("列主元为：%f\n", fPivot);
+			//printf("列主元为：%f\n", fPivot);
 			return 0;
 		}
 		//为了快点，尝试用倒数
@@ -1918,7 +1918,7 @@ template<typename _T>void Solve_Linear_Gause(_T* A, int iOrder, _T* B, _T* X, in
 
 		if (abs(fMax) < eps)
 		{//列主元为0，显然不满秩，该方程没有唯一解
-			printf("不满秩,列主元为：%f\n", fMax);
+			//printf("不满秩,列主元为：%f\n", fMax);
 			bSuccess = 0;
 			goto END;
 		}
@@ -2347,7 +2347,7 @@ template<typename _T>void Get_Inv_AAt_3x3(_T M[3 * 3], _T Inv[3 * 3], int* pbSuc
 	//第一轮
 	if (Abs(Aux[0]) < eps)
 	{
-		printf("列主元为：%f\n", Aux[0]);
+		//printf("列主元为：%f\n", Aux[0]);
 		bSuccess = 0;
 		goto END;
 	}
@@ -2364,7 +2364,7 @@ template<typename _T>void Get_Inv_AAt_3x3(_T M[3 * 3], _T Inv[3 * 3], int* pbSuc
 	//第二轮
 	if (Abs(Aux[4]) < eps) 
 	{	
-		printf("列主元为：%f\n", Aux[4]);
+		//printf("列主元为：%f\n", Aux[4]);
 		bSuccess = 0;	
 		goto END; 
 	}
