@@ -120,6 +120,10 @@ typedef struct Start_End {
 	int m_iStart, m_iEnd;
 }Start_End;
 
+typedef struct Start_Count {
+	int m_iStart, m_iCount;
+}Start_Count;
+
 typedef enum Key {
 	Arrow_Up,
 	Arrow_Down,
@@ -235,7 +239,7 @@ public:
 template<typename _T>struct  Neighbour_Item {
 public:
 	int m_iIndex;
-	float m_fDistance;
+	_T m_fDistance;
 };
 
 template<typename _T, int K> struct Neighbour_K {
@@ -283,9 +287,91 @@ public:
 	KD_Tree_3D<_T>* m_poTree_GPU;	//整个结构放在GPU中
 };
 /*********************************KD Tree**************************/
+
+template<typename _T, int n> struct Bin_Hash_Item {
+	unsigned char Bin[n];
+	_T m_iNext;	//不嫩等于0xFFFFFFFF
+};
+
+template<typename _T>struct Pose_Bsse_Pose {
+	_T T[3 * 4];
+	Start_Count m_oMatch_Pose_Start_Count;							//每个相机都有若干个匹配的相机位姿
+	Start_Count m_oKey_Point_Start_Count;						//本位姿查出多少组关键点
+};
+
+typedef struct Match_Pose {		//简单位姿配对信息
+	int m_iPose_B;								//与谁配对
+	Start_Count m_oMatch_Index_Start_Count;		//关键点配对 Start Count
+}Match_Pose;
+
+
+template<typename _T>struct Pose_Base {		//此处打算搞一个比较复杂的相机位姿匹配库
+	unsigned int m_iMax_Pose_Count, m_iPose_Cur, m_iPose_Count;	//一共容纳多少相机位姿
+	Pose_Bsse_Pose<_T>* m_pPose;									//共多少位姿
+
+	//为了方便不检索，以下可能会冗余存储。(A,B) 与 (B,A) 同时存在
+	unsigned int m_iMax_Match_Pose_Count, m_iMatch_Pose_Cur;	//Match_Cam 的内存到达边界
+	Match_Pose* m_pMatch_Pose;	//每个相机在此匹配的相机
+	unsigned int m_iMax_Match_Index_Count, m_iMatch_Index_Cur;
+	unsigned short (*m_pMatch_Index)[2];	//两个位姿内配对的点对Index
+
+	float  (*m_pKey_Point_Buffer)[2];						//所有点
+	unsigned char (*m_pFeature_Buffer)[128];				//所有特征值
+	unsigned int m_iMax_Key_Point_Count, m_iKey_Point_Cur;	//最大容纳数量
+};
+
 extern Mem_Mgr_Ex oMem_Mgr;;
 
 //超高频使用模板
+template<typename _T>void Disp_Part(_T* M, int iStride, int x, int y, int w, int h, const char* pcCaption)
+{
+	int i, j;
+	if (w + x > iStride)
+		return;
+	if (pcCaption)
+		printf("%s\n", (char*)pcCaption);
+
+	for (i = 0; i < h; i++)
+	{
+		for (j = 0; j < w; j++)
+		{
+			int iPos = (y + i) * iStride + (x + j);
+
+			//if (typeid(_T) == typeid(float))
+			if (std::is_same<_T, float>::value)
+			{
+				if (M[i * iStride + j] - (int)M[iPos])
+					printf("%.10ef, ", (double)M[iPos]);
+				else
+				{
+					if (M[iPos] - (int)M[iPos] == 0)
+						printf("%x, ", (int)M[iPos]);
+					else
+						printf("%f, ", (float)M[iPos]);
+				}
+			}
+			//else if (typeid(_T) == typeid(double))
+			else if (std::is_same<_T, double>::value)
+			{
+				if (M[i * iStride + j] - (int)M[iPos])
+					printf("%.10ef, ", (double)M[iPos]);
+				else
+					printf("%d, ", (int)M[iPos]);
+			}
+			else if (std::is_same<_T, unsigned int>::value ||
+				std::is_same<_T, int>::value ||
+				std::is_same<_T, unsigned short>::value ||
+				std::is_same<_T, unsigned char>::value)
+			/*else if ((typeid(_T) == typeid(unsigned int)) ||
+				(typeid(_T) == typeid(int)) ||
+				(typeid(_T) == typeid(unsigned short)) ||
+				(typeid(_T) == typeid(unsigned char)))*/
+				printf("%d,", (int)M[iPos]);
+		}
+		printf("\n");
+	}
+}
+
 template<typename _T>void Disp(_T* M, int iHeight, int iWidth, const char* pcCaption = NULL)
 {
 	int i, j;
@@ -300,8 +386,8 @@ template<typename _T>void Disp(_T* M, int iHeight, int iWidth, const char* pcCap
 			{
 				if (M[i * iWidth + j] - (int)M[i * iWidth + j])
 					//printf("%.10ef, ", (double)M[i * iWidth + j]);
-					printf("%f, ", (double)M[i * iWidth + j]);
-					//printf("%e, ", (double)M[i * iWidth + j]);
+					//printf("%f, ", (double)M[i * iWidth + j]);
+					printf("%e, ", (double)M[i * iWidth + j]);
 				else
 					printf("%d, ", (int)M[i * iWidth + j]);
 					//printf("%.4e, ", (double)M[i * iWidth + j]);
@@ -326,6 +412,7 @@ template<typename _T>void Disp(_T* M, int iHeight, int iWidth, const char* pcCap
 	}
 	return;
 }
+
 template<typename _T>void Disp_Fillness(_T A[], int m, int n, const char Caption[]=NULL);
 
 void Lock_Semaphore_For_Thread(Semaphore_For_Thread* ps, int iThreadID = 0);
@@ -336,12 +423,15 @@ int bGet_Line(FILE* pFile, char* pLine);
 int iRead_Line(FILE* pFile, char Line[], int iLine_Size);
 unsigned long long iGet_Tick_Count();
 int bStricmp(char* pStr_0, char* pStr_1);
+template<typename _T>int Comppare_Raw(_T* A, _T* B, unsigned int iSize, _T eps = 0.001f);
 int bGet_Value(char* pText, int iSize, const char* pKey, char* pValue);
 
 //上三角坐标转换为索引值
 int iUpper_Triangle_Cord_2_Index(int x, int y, int w);
 //上三角有效元数个数
 int iGet_Upper_Triangle_Size(int w);
+
+unsigned int iGet_Hash_Code(unsigned char* pBuffer, int iSize);
 
 //一组有的没的随机数生成
 int iRandom(int iStart, int iEnd);
@@ -490,6 +580,7 @@ void Free_Env_CPU();
 void* pMalloc(unsigned int iSize);
 void Shrink(void* p, unsigned int iSize);
 int bExpand(void* p, unsigned int iSize);
+int bExpand_Ex(void** pp, unsigned int iSize);
 void* pMove_2_Front(void* p);
 void Free(void* p);
 void Disp_Mem();

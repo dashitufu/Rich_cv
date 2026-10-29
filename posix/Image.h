@@ -262,10 +262,14 @@ void Float_2_Image(float* pImage, Image oImage);	//浮点数缓冲区转换为Image
 void Crop_Image(Image oSource, int x, int y, int w, int h, Image oDest);
 
 //高斯模糊
+void Gen_Gauss_Filter(int r, float fSigma, float* pFilter);
 void Gen_Gauss_Filter(int r, float fSigma, float** ppFilter);
+void Gen_Gauss_Filter(int r, float* pFilter);
 void Gen_Gauss_Filter(int r, float** ppFilter);		//根据r的大小确定sigma
 void Gauss_Filter_Ref(float* pSource, int iWidth, int iHeight, float* pDest, int r, float* pFilter);
 void Gauss_Filter_AVX512(float* pSource, int iWidth, int iHeight, float* pDest, float* pAux, int r, float* pFilter);
+int Gauss_Filter_AVX512(float* pSource, int iWidth, int iHeight, int r, float* pDest, float fSigma = -1, float Aux[] = NULL, float Filter[] = NULL);
+
 void Transpose_AVX512(float* pSource, int iWidth, int iHeight, float* pDest);
 void Box_Filter_Ref(Image oSource, Image oDest, int r);	//方框滤波参考程序
 

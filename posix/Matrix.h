@@ -3,6 +3,9 @@
 #include <typeinfo>
 #include "Common.h"
 //using namespace std;
+#ifndef  ESP32
+	#include "immintrin.h"
+#endif // ! ESP32
 
 #define sign(x) (x>=0?1:-1)
 
@@ -108,6 +111,10 @@ template<typename _T>_T fGet_Determinant(_T* A, int iOrder);			//求行列式
 
 //矩阵函数
 template<typename _T>void Matrix_Transpose(_T* A, int ma, int na, _T* At);
+#ifndef  ESP32
+void Transpose_AVX_8x8(__m256 Source[8], __m256 Dest[8] = NULL);
+void Transpose_AVX_float(float* A, int iStride_A, float* B, int iStride_B);
+#endif
 
 //向量函数
 template<typename _T>int bIs_Finite(_T V[], int n);
@@ -129,7 +136,7 @@ template<typename _T>int QR_Decompose_Complex(Complex<_T>* A, int n, Complex<_T>
 template<typename _T>int QR_Decompose_Real(_T* A, int n, _T* R, _T* Q=NULL, int iR_Type=0, int iQ_Type=1, int* pbDup_Root=NULL, int* pbComplex_Root=NULL);
 template<typename _T>int bInverse_Power(_T A[], int n, _T* pfEigen_Value, _T Eigen_Vector[], _T eps = 1e-5f);
 template<typename _T>int bInverse_Power(_T A[3][3], _T* pfEigen_Value, _T Eigen_Vector[3], _T eps = 1e-9f);
-template<typename _T>int Get_Eigen_Vector_by_Value_Real(_T A[], int n, _T fEigen, _T Eigen_Vector[3 * 3], int* piCount=NULL, int bIn_Place=1);
+template<typename _T>int Get_Eigen_Vector_by_Value_Real(_T A[], int n, _T fEigen, _T Eigen_Vector[], int* piCount=NULL, int bIn_Place=1);
 
 //SVD
 template<typename _T>void SVD_Alloc(int h, int w, SVD_Info* poInfo, _T* A = NULL);

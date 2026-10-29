@@ -1274,7 +1274,7 @@ void* pMalloc(Mem_Mgr* poMem_Mgr, unsigned int iSize)
 
 void* pMove_2_Front(Mem_Mgr* poMem_Mgr, void* p)
 {
-	unsigned int iSub_Block_Count, iSub_Block_Start;
+	unsigned int/* iSub_Block_Count,*/ iSub_Block_Start;
 	unsigned long long iSpace_Start;
 	if (!p || !poMem_Mgr || !poMem_Mgr->m_pBuffer)	return NULL;
 	if (((unsigned char*)p - poMem_Mgr->m_pBuffer) % poMem_Mgr->m_iBytes_Per_Bottom_Sub_Block)
@@ -1287,10 +1287,16 @@ void* pMove_2_Front(Mem_Mgr* poMem_Mgr, void* p)
 	iSpace_Start = ((unsigned char*)p) - poMem_Mgr->m_pBuffer;
 	iSub_Block_Start = (int)(iSpace_Start / poMem_Mgr->m_iBytes_Per_Bottom_Sub_Block);
 	Mem_Mgr_Hash_Item *poItem = poFind(poMem_Mgr->m_pHash_Item, iSub_Block_Start, poMem_Mgr->m_pHash_Table, poMem_Mgr->m_iHash_Size);
+	if (!poItem)
+	{
+		printf("Pointer not found\n");
+		return NULL;
+	}
+
 	unsigned long long iSize = poItem->m_iSub_Block_Count * poMem_Mgr->m_iBytes_Per_Bottom_Sub_Block;
 
 	Free(poMem_Mgr,p);
-	void *p1 = pMalloc(poMem_Mgr, iSize);
+	void *p1 = (void*)pMalloc(poMem_Mgr, (unsigned int)iSize);
 	memcpy(p1, p, iSize);
 	return p1;
 }
@@ -1471,6 +1477,30 @@ void Disp_Mem(Mem_Mgr* poMem_Mgr,int iLayer_Count)
 	free(pBuffer);
 	return;
 }
+
+//给定一个指针，返回这个内存快的大小
+unsigned long long iGet_Size_by_p(Mem_Mgr* poMem_Mgr, void* p)
+{
+	unsigned int/* iSub_Block_Count,*/ iSub_Block_Start;
+	unsigned long long iSpace_Start;
+	if (!p || !poMem_Mgr || !poMem_Mgr->m_pBuffer)	return 0;
+	if (((unsigned char*)p - poMem_Mgr->m_pBuffer) % poMem_Mgr->m_iBytes_Per_Bottom_Sub_Block)
+	{//有时候有些地址落在该开辟的内存块中的第一块，会造成计算误差，以为是头
+		printf("Pointer not found\n");
+		return 0;
+	}
+
+	//先搞0层
+	iSpace_Start = ((unsigned char*)p) - poMem_Mgr->m_pBuffer;
+	iSub_Block_Start = (int)(iSpace_Start / poMem_Mgr->m_iBytes_Per_Bottom_Sub_Block);
+	Mem_Mgr_Hash_Item* poItem = poFind(poMem_Mgr->m_pHash_Item, iSub_Block_Start, poMem_Mgr->m_pHash_Table, poMem_Mgr->m_iHash_Size);
+	if (!poItem)
+		return 0;
+
+	unsigned long long iSize = poItem->m_iSub_Block_Count * poMem_Mgr->m_iBytes_Per_Bottom_Sub_Block;
+	return iSize;
+}
+
 //将原来分配的大小缩小到iSize，原来分配大小必须大于等于iSize，否则啥也不干
 //Input:	p: 原来内存指针
 //			iSize: 新的大小
@@ -1519,7 +1549,9 @@ int bExpand(Mem_Mgr* poMem_Mgr, void* p, unsigned int iSize)
 	int i, j, iZero_Bit_Count,iResult=1;
 	unsigned long long iOccupancy;
 
-	poItem = poFind(poMem_Mgr->m_pHash_Item, iSub_Block_Start_All, poMem_Mgr->m_pHash_Table, poMem_Mgr->m_iHash_Size);
+	if (!(poItem = poFind(poMem_Mgr->m_pHash_Item, iSub_Block_Start_All, poMem_Mgr->m_pHash_Table, poMem_Mgr->m_iHash_Size)))
+		return 0;
+	
 	iOrg_Size = (unsigned int)(poItem->m_iSub_Block_Count * poMem_Mgr->m_iBytes_Per_Bottom_Sub_Block);
 	iSize_Delta = iSize - iOrg_Size;
 	if (iSize <= iOrg_Size)
@@ -1558,6 +1590,10 @@ int bExpand(Mem_Mgr* poMem_Mgr, void* p, unsigned int iSize)
 		{
 			iResult = 1;
 			iSub_Block_Count_Free = iSub_Block_Count_Need;
+		}else
+		{
+			iResult = 0;
+			iSub_Block_Count_Free = 0;
 		}
 	}else if (i == 0)
 	{

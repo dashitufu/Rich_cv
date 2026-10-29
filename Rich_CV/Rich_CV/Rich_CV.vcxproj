@@ -25,8 +25,11 @@
     <ClCompile Include="..\..\posix\Common.cpp" />
     <ClCompile Include="..\..\posix\Image.cpp" />
     <ClCompile Include="..\..\posix\Matrix.cpp" />
+    <ClCompile Include="..\..\posix\Sift.cpp" />
     <ClCompile Include="..\..\posix\Slam.cpp" />
-    <ClCompile Include="..\..\Test\Slam_Test_3.cpp" />
+    <ClCompile Include="..\..\Test\E_8_Point.cpp" />
+    <ClCompile Include="..\..\Test\Ransac_Test_1.cpp" />
+    <ClCompile Include="..\..\Test\Sift_Test_1.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -132,6 +135,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <HeapReserveSize>6988</HeapReserveSize>
+      <HeapCommitSize>6988</HeapCommitSize>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -147,6 +152,10 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <StackReserveSize>
+      </StackReserveSize>
+      <StackCommitSize>
+      </StackCommitSize>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

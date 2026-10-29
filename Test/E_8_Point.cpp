@@ -27,20 +27,23 @@ void E_Test_1()
             {  0.15399902, -0.10898468},  // йс2 ╣Ц8
         }
     };
-    
     _T E[3 * 3], T[4 * 4];
+    _T eps = (4 / 768) * (4 / 768);
     int iResult;
     unsigned long long tStart = iGet_Tick_Count();
-    for(int i=0;i<100000;i++)
-    iResult = Estimate_E_8Point<_T>(Match_Point[0], Match_Point[1], T, E);
+    //for(int i=0;i<100000;i++)
+    //iResult = Estimate_E_8Point<_T>(Match_Point[0], Match_Point[1], T, E);
+    iResult = Estimate_E_T_nPoint(Match_Point[0], Match_Point[1], 8, NULL, T, E, eps, 1);
+    if (!iResult)
+        return;
     printf("%lld\n", iGet_Tick_Count() - tStart);
-    //Disp(T, 3, 4, "T");
-    //Disp(E, 3, 3, "E");
+    Disp(T, 3, 4, "T");
+    Disp(E, 3, 3, "E");
     printf("Error: %e\n", Test_Triangulate(T, Match_Point[0], Match_Point[1], 8));
 
     return;
 }
-int main()
+int E_8_Point_Main()
 {
     bInit_Env_CPU(15000000, 128);
     E_Test_1();

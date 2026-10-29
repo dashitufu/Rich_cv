@@ -263,7 +263,7 @@ void E_Test_6()
     return;
 }
 
-int main()
+int E_5_Point_Main()
 {
 	bInit_Env_CPU(15000000,128);
     E_Test_6();

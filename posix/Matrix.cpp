@@ -13,6 +13,49 @@
 	//#include "../esp_dsp_pc/esp_dsp.h"
 #endif
 
+#ifdef ESP32
+template<typename _T> void Matrix_Multiply(_T* A, int ma, int na, _T* B, int nb, _T* C)
+{
+	if (std::is_same<_T, float>::value)
+		dspm_mult_f32((float*)A, (float*)B, (float*)C, ma, na, nb);
+	else
+	{
+		_T* C_Dup;
+		if (C == A || C == B)
+		{
+			C_Dup = (_T*)pMalloc(ma * nb * sizeof(_T));
+			if (!C_Dup)
+			{
+				printf("Fail to Malloc_1 in Matrix_Multiply\n");
+				return;
+			}
+		}
+		else
+			C_Dup = C;
+
+		int y, x, i;;
+		_T fValue;
+		for (y = 0; y < ma; y++)
+		{//从规模上看，此处计算是大头，只优化内存顺序并不一定有好结果
+			for (x = 0; x < nb; x++)
+			{
+				for (fValue = 0, i = 0; i < na; i++)
+					fValue += A[y * na + i] * B[i * nb + x];
+				C_Dup[y * nb + x] = fValue;
+			}
+		}
+
+		//Disp(C_Dup, ma, na);
+		if (C == A || C == B)
+		{
+			memcpy(C, C_Dup, ma * nb * sizeof(_T));
+			Free(C_Dup);
+		}
+	}
+}
+#endif
+
+
 //实例化
 #ifndef ESP32
 template void Matrix_Multiply<float>(float* A, int ma, int na, float* B, int nb, float* C);
@@ -109,6 +152,8 @@ void Matrix_Multiply_Reshape_double(double A[], int ma, int na, double B[], int 
 	}
 	return;
 }
+
+template int A_x_Bt(float A[], int ma, int na, float B[], int mb, float C[]);
 template int A_x_Bt(double A[], int ma, int na, double B[], int mb, double C[]);
 template<typename _T>int A_x_Bt(_T A[], int ma, int na, _T B[], int mb, _T C[])
 {//无比注意参数
@@ -153,6 +198,13 @@ template void At_x_B(float A[], int ma, int na, float B[], int nb, float C[]);
 template void At_x_B(double A[], int ma, int na, double B[], int nb, double C[]);
 template<typename _T>void At_x_B(_T A[], int ma, int na, _T B[], int nb, _T C[])
 {
+	if (ma < 8 || na < 8)
+	{
+		_T At[8 * 8];
+		Matrix_Transpose(A, ma, na, At);
+		Matrix_Multiply(At, na, ma, B, na, C);
+		return;
+	}
 	int mb = ma, mc = na, nc = nb;
 	int iBlock_Size = 64 / sizeof(_T);
 	int ma1, na1, mb1, nb1;
@@ -164,8 +216,7 @@ template<typename _T>void At_x_B(_T A[], int ma, int na, _T B[], int nb, _T C[])
 		na1 = ALIGN_SIZE_8(na);
 		mb1 = na1;
 		nb1 = ALIGN_SIZE_8(nb);
-	}
-	else
+	}else
 	{
 		ma1 = ALIGN_SIZE_16(ma);
 		na1 = ALIGN_SIZE_16(na);
@@ -581,82 +632,6 @@ void Transpose_Multiply_AVX_float(float A[], int m, int n, float B[])
 	}
 	return;
 }
-template void Transpose_Multiply(float A[], int m, int n, float B[], int bAAt);
-template void Transpose_Multiply(double A[], int m, int n, double B[], int bAAt);
-template<typename _T> void Transpose_Multiply(_T A[], int m, int n, _T B[], int bAAt)
-{//iFlag=0 时 B = A'A iFlag=1 时 B= AA'
-	_T* At = NULL;;
-	_T* B1;
-	if (!bAAt)
-	{//A'A 的情况，先转置，再用AA'
-		if (typeid(_T) == typeid(double) && n <= 8)
-		{
-			for (int y = 0; y < n; y++)
-			{
-				for (int x = y; x < n; x++)
-				{	//(y,x)为目标地址
-					int iPos_r = y,
-						iPos_c = x;
-					_T fValue = 0;
-					for (int x1 = 0; x1 < n; x1++)
-					{
-						fValue += A[iPos_r] * A[iPos_c];
-						iPos_r += n;
-						iPos_c += n;
-					}
-					B[x * n + y] = B[y * n + x] = fValue;
-				}
-			}
-		}else
-		{
-			At = (_T*)pMalloc(n * m * sizeof(_T));
-			Matrix_Transpose(A, m, n, At);
-			//再调用一次，懒得写
-			Transpose_Multiply(At, n, m, B, 1);	//AtA
-			Free(At);
-		}
-	}else
-	{//此处尝试优化一下，用A的行来推进
-		int x, y;
-		if (A == B)
-			B1 = (_T*)pMalloc(m * m * sizeof(_T));
-		else
-			B1 = B;
-
-		if (!B1)
-		{
-			printf("Invalid B1 in Transpose_Multiply\n");
-			return;
-		}
-
-		if (typeid(_T) == typeid(double) && n >= 8)
-			Transpose_Multiply_AVX_double((double*)A, m, n, (double*)B1);
-		else if (typeid(_T) == typeid(float) && n >= 16)
-			Transpose_Multiply_AVX_float((float*)A, m, n, (float*)B1);
-		else
-		{
-			//此处应该利用对称性减少计算量
-			for (y = 0; y < m; y++)
-			{
-				for (x = y; x < m; x++)
-				{	//(y,x)为目标地址
-					int iPos_r = y * n,
-						iPos_c = x * n;
-					_T fValue = 0;
-					for (int x1 = 0; x1 < n; x1++)
-						fValue += A[iPos_r++] * A[iPos_c++];
-					B1[x * m + y] = B1[y * m + x] = fValue;
-				}
-			}
-		}
-
-		if (A == B)
-		{
-			memcpy(B, B1, m * m * sizeof(_T));
-			Free(B1);
-		}
-	}
-}
 
 template<typename _T> void Matrix_Multiply(_T* A, int ma, int na, _T* B, int nb, _T* C)
 {//Amn x Bno = Cmo
@@ -709,6 +684,124 @@ template<typename _T> void Matrix_Multiply(_T* A, int ma, int na, _T* B, int nb,
 	return;
 }
 
+template void Exp_M(float A[], int n, float B[], float eps);
+template void Exp_M(double A[], int n, double B[], double eps);
+template<typename _T>void Exp_M(_T A[], int n, _T B[], _T eps)
+{//已经解决收敛问题，但解决不了精度问题。精度要再上层楼
+	//理论上对等罗德里格斯公式，可以用来验算
+	unsigned long long iN_Factorial = 1;
+	int n_sqr = n * n;
+	_T* pA1 = (_T*)pMalloc(n_sqr * 3 * sizeof(_T)),
+		* pA2 = pA1 + n_sqr,
+		* pA_Sum = pA2 + n_sqr;
+
+	Gen_I_Matrix(pA1, n, n);
+	Gen_I_Matrix(pA_Sum, n, n);
+	_T fPre_Sum = 0, fSum,
+		fDelta;
+
+	int i;
+	for (i = 1;; i++)
+	{
+		Matrix_Multiply(pA1, n, n, A, n, pA2);
+		Vector_Multiply<_T>(pA2, n * n, 1.f / i, pA1);
+		Vector_Add(pA_Sum, pA1, n * n, pA_Sum);
+
+		fSum = fGet_Mod(pA_Sum, n_sqr);
+		fDelta = fSum - fPre_Sum;
+		if (Abs(fDelta) < eps)
+			break;
+		fPre_Sum = fSum;
+	}
+	memcpy(B, pA_Sum, n_sqr * sizeof(_T));
+	Free(pA1);
+	return;
+}
+#endif
+
+template void Transpose_Multiply(float A[], int m, int n, float B[], int bAAt);
+template void Transpose_Multiply(double A[], int m, int n, double B[], int bAAt);
+template<typename _T> void Transpose_Multiply(_T A[], int m, int n, _T B[], int bAAt)
+{//iFlag=0 时 B = A'A iFlag=1 时 B= AA'
+	_T* At = NULL;;
+	_T* B1;
+	if (!bAAt)
+	{//A'A 的情况，先转置，再用AA'
+		if (std::is_same<_T, double>::value)
+		//if (typeid(_T) == typeid(double) && n <= 8)
+		{
+			for (int y = 0; y < n; y++)
+			{
+				for (int x = y; x < n; x++)
+				{	//(y,x)为目标地址
+					int iPos_r = y,
+						iPos_c = x;
+					_T fValue = 0;
+					for (int x1 = 0; x1 < m; x1++)
+					{
+						fValue += A[iPos_r] * A[iPos_c];
+						iPos_r += n;
+						iPos_c += n;
+					}
+					B[x * n + y] = B[y * n + x] = fValue;
+				}
+			}
+		}
+		else
+		{
+			At = (_T*)pMalloc(n * m * sizeof(_T));
+			Matrix_Transpose(A, m, n, At);
+			//再调用一次，懒得写
+			Transpose_Multiply(At, n, m, B, 1);	//AtA
+			Free(At);
+		}
+	}
+	else
+	{//此处尝试优化一下，用A的行来推进
+		int x, y;
+		if (A == B)
+			B1 = (_T*)pMalloc(m * m * sizeof(_T));
+		else
+			B1 = B;
+
+		if (!B1)
+		{
+			printf("Invalid B1 in Transpose_Multiply\n");
+			return;
+		}
+
+#ifndef ESP32
+		if (typeid(_T) == typeid(double) && n >= 8)
+			Transpose_Multiply_AVX_double((double*)A, m, n, (double*)B1);
+		else if (typeid(_T) == typeid(float) && n >= 16)
+			Transpose_Multiply_AVX_float((float*)A, m, n, (float*)B1);
+		else
+#endif
+
+		{
+			//此处应该利用对称性减少计算量
+			for (y = 0; y < m; y++)
+			{
+				for (x = y; x < m; x++)
+				{	//(y,x)为目标地址
+					int iPos_r = y * n,
+						iPos_c = x * n;
+					_T fValue = 0;
+					for (int x1 = 0; x1 < n; x1++)
+						fValue += A[iPos_r++] * A[iPos_c++];
+					B1[x * m + y] = B1[y * m + x] = fValue;
+				}
+			}
+		}
+
+		if (A == B)
+		{
+			memcpy(B, B1, m * m * sizeof(_T));
+			Free(B1);
+		}
+	}
+}
+
 template void Matrix_Multiply_3x1(float A[3 * 3], float B[3], float C[3]);
 template void Matrix_Multiply_3x1(double A[3 * 3], double B[3], double C[3]);
 template<typename _T>void Matrix_Multiply_3x1(_T A[3 * 3], _T B[3], _T C[3])
@@ -721,7 +814,8 @@ template<typename _T>void Matrix_Multiply_3x1(_T A[3 * 3], _T B[3], _T C[3])
 		C1[1] = A[3] * B[0] + A[4] * B[1] + A[5] * B[2];
 		C1[2] = A[6] * B[0] + A[7] * B[1] + A[8] * B[2];
 		C[0] = C1[0], C[1] = C1[1], C[2] = C1[2];
-	}else
+	}
+	else
 	{
 		C[0] = A[0] * B[0] + A[1] * B[1] + A[2] * B[2];
 		C[1] = A[3] * B[0] + A[4] * B[1] + A[5] * B[2];
@@ -757,42 +851,6 @@ template<typename _T>void Matrix_Multiply_3x3(_T A[3 * 3], _T B[3 * 3], _T C[3 *
 }
 
 
-
-template void Exp_M(float A[], int n, float B[], float eps);
-template void Exp_M(double A[], int n, double B[], double eps);
-template<typename _T>void Exp_M(_T A[], int n, _T B[], _T eps)
-{//已经解决收敛问题，但解决不了精度问题。精度要再上层楼
-	//理论上对等罗德里格斯公式，可以用来验算
-	unsigned long long iN_Factorial = 1;
-	int n_sqr = n * n;
-	_T* pA1 = (_T*)pMalloc(n_sqr * 3 * sizeof(_T)),
-		* pA2 = pA1 + n_sqr,
-		* pA_Sum = pA2 + n_sqr;
-
-	Gen_I_Matrix(pA1, n, n);
-	Gen_I_Matrix(pA_Sum, n, n);
-	_T fPre_Sum = 0, fSum,
-		fDelta;
-
-	int i;
-	for (i = 1;; i++)
-	{
-		Matrix_Multiply(pA1, n, n, A, n, pA2);
-		Vector_Multiply<_T>(pA2, n * n, 1.f / i, pA1);
-		Vector_Add(pA_Sum, pA1, n * n, pA_Sum);
-
-		fSum = fGet_Mod(pA_Sum, n_sqr);
-		fDelta = fSum - fPre_Sum;
-		if (Abs(fDelta) < eps)
-			break;
-		fPre_Sum = fSum;
-	}
-	memcpy(B, pA_Sum, n_sqr * sizeof(_T));
-	Free(pA1);
-	return;
-}
-
-#endif
 template void Copy_Matrix_Partial(float Source[], int m, int n, float Dest[], int iDest_Stride, int x, int y);
 template void Copy_Matrix_Partial(double Source[], int m, int n, double Dest[], int iDest_Stride, int x, int y);
 template<typename _T>void Copy_Matrix_Partial(_T Source[], int m, int n, _T Dest[], int iDest_Stride, int x, int y)
@@ -973,6 +1031,42 @@ template<typename _T> void Normalize(_T V[], int n, _T V_1[])
 
 //******************转置函数***********************************/
 #ifndef ESP32
+void Transpose_AVX_float(unsigned char* A, int iStride_A, unsigned char* B, int iStride_B)
+{
+	union {
+		struct {
+			__m128i r0, r1, r2, r3, r4, r5, r6, r7;
+		};
+		struct {
+			__m128i tt0, tt1, tt2, tt3, tt4, tt5, tt6, tt7;
+		};
+	};
+
+	r0 = _mm_loadu_si128((const __m128i*) & A[0 * iStride_A]);
+	r1 = _mm_loadu_si128((const __m128i*) & A[1 * iStride_A]);
+	r2 = _mm_loadu_si128((const __m128i*) & A[2 * iStride_A]);
+	r3 = _mm_loadu_si128((const __m128i*) & A[3 * iStride_A]);
+	r4 = _mm_loadu_si128((const __m128i*) & A[4 * iStride_A]);
+	r5 = _mm_loadu_si128((const __m128i*) & A[5 * iStride_A]);
+	r6 = _mm_loadu_si128((const __m128i*) & A[6 * iStride_A]);
+	r7 = _mm_loadu_si128((const __m128i*) & A[7 * iStride_A]);
+
+	//此处是有作用的，但与体系有关
+	_mm_prefetch((const char*)&A[8 * iStride_A], _MM_HINT_T0);
+	_mm_prefetch((const char*)&A[9 * iStride_A], _MM_HINT_T0);
+
+	//将两行的元素并在每两个一起
+	__m128i t0 = _mm_unpacklo_epi8(r0, r1); // [a0, b0, a1, b1, a4, b4, a5, b5]
+	__m128i t1 = _mm_unpackhi_epi8(r0, r1);
+	__m128i t2 = _mm_unpacklo_epi8(r2, r3);
+	__m128i t3 = _mm_unpackhi_epi8(r2, r3);
+	__m128i t4 = _mm_unpacklo_epi8(r4, r5);
+	__m128i t5 = _mm_unpackhi_epi8(r4, r5);
+	__m128i t6 = _mm_unpacklo_epi8(r6, r7);
+	__m128i t7 = _mm_unpackhi_epi8(r6, r7);
+
+
+}
 void Transpose_AVX_float(float* A, int iStride_A, float* B, int iStride_B)
 {
 	union {
@@ -1027,6 +1121,7 @@ void Transpose_AVX_float(float* A, int iStride_A, float* B, int iStride_B)
 	*(__m256*)(&B[6 * iStride_B]) = _mm256_permute2f128_ps(tt2, tt6, 0x31);
 	*(__m256*)(&B[7 * iStride_B]) = _mm256_permute2f128_ps(tt3, tt7, 0x31);
 }
+
 template<typename _T>void Transpose_AVX_4_byte(_T A[], int m, int n, _T B[])
 {//对于4字节数据类型，用8x8块
 	int m1 = (m / 8) * 8, n1 = (n / 8) * 8;
@@ -1095,7 +1190,48 @@ template<typename _T>void Transpose_AVX_8_byte(_T A[], int m, int n, _T B[])
 
 	return;
 }
+
+void Transpose_AVX_8x8(__m256 Source[8], __m256 Dest[8])
+{//将8x8 float 块进行转置, 安全函数，源可以等于目的
+	//此处是有作用的，但与体系有关
+
+	//将两行的元素并在每两个一起
+	__m256 tt0, tt1, tt2, tt3, tt4, tt5, tt6, tt7;
+	__m256 t0 = _mm256_unpacklo_ps(Source[0], Source[1]); // [a0, b0, a1, b1, a4, b4, a5, b5]
+	__m256 t1 = _mm256_unpackhi_ps(Source[0], Source[1]);
+	__m256 t2 = _mm256_unpacklo_ps(Source[2], Source[3]);
+	__m256 t3 = _mm256_unpackhi_ps(Source[2], Source[3]);
+	__m256 t4 = _mm256_unpacklo_ps(Source[4], Source[5]);
+	__m256 t5 = _mm256_unpackhi_ps(Source[4], Source[5]);
+	__m256 t6 = _mm256_unpacklo_ps(Source[6], Source[7]);
+	__m256 t7 = _mm256_unpackhi_ps(Source[6], Source[7]);
+
+	//将两行并到每4个一起
+	tt0 = _mm256_shuffle_ps(t0, t2, _MM_SHUFFLE(1, 0, 1, 0));
+	tt1 = _mm256_shuffle_ps(t0, t2, _MM_SHUFFLE(3, 2, 3, 2));
+	tt2 = _mm256_shuffle_ps(t1, t3, _MM_SHUFFLE(1, 0, 1, 0));
+	tt3 = _mm256_shuffle_ps(t1, t3, _MM_SHUFFLE(3, 2, 3, 2));
+	tt4 = _mm256_shuffle_ps(t4, t6, _MM_SHUFFLE(1, 0, 1, 0));
+	tt5 = _mm256_shuffle_ps(t4, t6, _MM_SHUFFLE(3, 2, 3, 2));
+	tt6 = _mm256_shuffle_ps(t5, t7, _MM_SHUFFLE(1, 0, 1, 0));
+	tt7 = _mm256_shuffle_ps(t5, t7, _MM_SHUFFLE(3, 2, 3, 2));
+
+	if (!Dest)
+		Dest = Source;
+
+	//每八个一起
+	Dest[0] = _mm256_permute2f128_ps(tt0, tt4, 0x20);
+	Dest[1] = _mm256_permute2f128_ps(tt1, tt5, 0x20);
+	Dest[2] = _mm256_permute2f128_ps(tt2, tt6, 0x20);
+	Dest[3] = _mm256_permute2f128_ps(tt3, tt7, 0x20);
+	Dest[4] = _mm256_permute2f128_ps(tt0, tt4, 0x31);
+	Dest[5] = _mm256_permute2f128_ps(tt1, tt5, 0x31);
+	Dest[6] = _mm256_permute2f128_ps(tt2, tt6, 0x31);
+	Dest[7] = _mm256_permute2f128_ps(tt3, tt7, 0x31);
+	return;
+}
 #endif
+
 
 template<typename _T>void Matrix_Transpose(_T* A, int ma, int na, _T* At)
 {//矩阵转置，安全函数，源可以等于目标
@@ -1668,6 +1804,7 @@ template<typename _T>int Elementary_Row_Op_AAt(_T Ai[], int iOrder,_T X[])
 	return 1;
 }
 
+template int Solve_Linear_2x2(float A[4], float b[2], float x[2], float eps);
 template int Solve_Linear_2x2(double A[4], double b[2], double x[2], double eps);
 template<typename _T>int Solve_Linear_2x2(_T A[4], _T b[2], _T x[2], _T eps)
 {//2x2 不需理会AAt，还可以完美搞定列主元法
@@ -1770,6 +1907,8 @@ END:
 		Free(Ai);
 	return bRet;
 }
+
+template int Solve_Linear_Solution_Construction(float* A, int m, int n, float B[], float* pBasic_Solution, int* piBasic_Solution_Count, float* pSpecial_Solution);
 template int Solve_Linear_Solution_Construction(double* A, int m, int n, double B[],double* pBasic_Solution, int* piBasic_Solution_Count, double* pSpecial_Solution);
 template<typename _T> int Solve_Linear_Solution_Construction(_T* A, int m, int n, _T B[], 
 	_T* pBasic_Solution, int* piBasic_Solution_Count, _T* pSpecial_Solution)
@@ -2045,8 +2184,10 @@ template<typename _T> void Solve_Linear_Contradictory(_T A[], int m, int n, _T B
 	}else
 	{
 		//先用快速方法冲一下
+		bResult = 1;
 		AtA = (_T*)pMalloc((n * n) * sizeof(_T));
 		Transpose_Multiply(A, m, n, AtA, 0);
+		//Disp(AtA, 9, 9, "AtA");
 		if (!bInverse_Power(AtA, n, (_T*)NULL, X))
 		{
 			bResult = 0;
@@ -2066,6 +2207,7 @@ template<typename _T> void Solve_Linear_Contradictory(_T A[], int m, int n, _T B
 		*pbSuccess = bResult;
 }
 //*******************线性方程***********************************/
+template int Elementary_Row_Op_Pivot(float A[], int m, int n);
 template int Elementary_Row_Op_Pivot(double A[], int m, int n);
 template<typename _T>int Elementary_Row_Op_Pivot(_T A[], int m,int n)
 {//列主元法进行初等行变换，注意，此处已经换行
@@ -2678,8 +2820,9 @@ END:
 //********************一组LU分解********************************/
 
 //**********************一组QR分解******************************/
-template int Get_Eigen_Vector_by_Value_Real(double A[], int n, double fEigen, double Eigen_Vector[3 * 3], int* piCount, int bIn_Place);
-template<typename _T>int Get_Eigen_Vector_by_Value_Real(_T A[], int n, _T fEigen, _T Eigen_Vector[3 * 3], int* piCount, int bIn_Place)
+template int Get_Eigen_Vector_by_Value_Real(float A[], int n, float fEigen, float Eigen_Vector[], int* piCount, int bIn_Place);
+template int Get_Eigen_Vector_by_Value_Real(double A[], int n, double fEigen, double Eigen_Vector[], int* piCount, int bIn_Place);
+template<typename _T>int Get_Eigen_Vector_by_Value_Real(_T A[], int n, _T fEigen, _T Eigen_Vector[], int* piCount, int bIn_Place)
 {//根据一个特征值，求出一组
 	//有两种流派，一种直接法解方程，一种幂法迭代
 	//直接法，人生苦短，先做这个
@@ -3050,6 +3193,8 @@ static void CzStep(Complex<_T>* A, int nN, int mBlk, Complex<_T>* Q, Complex<_T>
 		for (int j = 0; j < i - 1; j++)
 			A[i * nN + j] = Complex<_T>{ _T(0), _T(0) };
 }
+
+template int QR_Decompose_Complex(float A[], int N, Complex<float>R[], int* piReal_Count, Complex<float>Q[]);
 template int QR_Decompose_Complex(double A[], int N, Complex<double>R[], int* piReal_Count,Complex<double>Q[]);
 template<typename _T>int QR_Decompose_Complex(_T A[], int N, Complex<_T>R[], int* piReal_Count,Complex<_T>Q[])
 {
@@ -3068,7 +3213,7 @@ template<typename _T>int QR_Decompose_Complex(_T A[], int N, Complex<_T>R[], int
 template<typename _T> void QR_Sort(Complex<_T> R[], int n,int *piReal_Count=NULL)
 {//对最终的特征向量按照先实后复数排序
 	int iReal_Count = 0;
-	const _T eps = 1e-10;
+	const _T eps = (_T)1e-10;
 	//少量数据情况下，来个冒泡了事
 	//第一杠，跳出实数解
 	for (int i = 0; i < n; i++)
@@ -3670,6 +3815,7 @@ END:
 		Free(Vt_1);
 }
 
+template int SVD_Decompose(float A[], int n, float S[], float U[], float Vt[]);
 template int SVD_Decompose(double A[], int n, double S[], double U[], double Vt[]);
 template<typename _T>int SVD_Decompose(_T A[], int n, _T S[], _T U[], _T Vt[])
 {//简便版SVD,对A 进行SVD分解 A = U * S * V'

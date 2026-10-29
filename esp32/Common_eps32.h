@@ -82,13 +82,16 @@ void esp32_Start_Server();
 int iAngle_To_Signal(float fAngle, float fLeast_Time = 0.5, float fMost_Time = 2.5, int iFreq = 50, int Qt = 4096);
 
 /*******************************sg90舵机控制**************************/
-void Motor_Rotate(float fAngle, int iChannel);
-void Motor_Rotate(float fAngle, int iChannel);
-void Init_Motor(int iChannel, int iPin, int iFreq = 50, int iBits = 12);
-void Motor_Rotate_Hor(float fAngle);
-void Motor_Rotate_Ver(float fAngle);
+void sg90_180_Rotate(float fAngle, int iChannel);
+void sg90_180_Rotate(float fAngle, int iChannel);
+void Init_sg90_180(int iChannel, int iPin, int iFreq = 50, int iBits = 12);
+void sg90_Rotate_Hor(float fAngle);
+void sg90_Rotate_Ver(float fAngle);
 void Motor_Rotate_Hor_Inc(float fDelta);
 void Motor_Rotate_Ver_Inc(float fDelta);
+
+void Init_sg90_360(int iChannel, int iPin, int iFreq, int iBit);
+void Set_sg90_360_Speed(float fSpeed, int iChannel, int iBit = 12);
 /*******************************sg90舵机控制**************************/
 
 /*******************************ST7789 TFT显示屏**********************/
@@ -104,6 +107,7 @@ void Textout(TFT_Setting* poSetting, uint16_t x, uint16_t yTop, uint16_t maxW,
 	const char* s, unsigned char R, unsigned char G, unsigned char B);
 void Textout(int x, int y, const char* str, unsigned char R = 255, unsigned char G = 255, unsigned char B = 255);
 Image Get_Screen();
+void Disp_Stack();
 #endif
 /*******************************ST7789 TFT显示屏**********************/
 

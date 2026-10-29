@@ -1,6 +1,7 @@
 #pragma once
 #include "Common.h"
 #include "Matrix.h"
+#include "Image.h"
 
 typedef enum {
 	Hartley,		//最优
@@ -20,9 +21,11 @@ template<typename _T>void Get_K3_by_eq_focal(_T eq_f, _T w, _T h, _T K[3]);
 template<typename _T>void Get_K9_by_eq_focal(_T eq_f, _T w, _T h, _T K[3 * 3]);
 template<typename _T>void K3_Proj(_T K[3], _T P[3], _T uv[2], int bHas_z = 1);
 template<typename _T>void K3_Inv(_T K[3], _T K_Inv[3]);	//K3 快速求逆
+template<typename _T>void K4_Inv(_T K[4], _T K_Inv[4]);
 template<typename _T>void K9_2_K4(_T K9[9], _T K4[4]);
 template<typename _T>void K4_2_K9(_T K4[9], _T K9[4]);
 template<typename _T>void K3_2_K9(_T K3[9], _T K9[4]);
+template<typename _T>void K3_2_K4(_T K3[3], _T K4[4]);
 
 //一组归一化函数
 template<typename _T>void Normalize_by_B_Box_2d(_T P[][2], int n, _T fBox_Size, _T Norm[][2], _T K[3] = NULL, _T K_Inv[] = NULL);	//求一bounding_Box, 将图片搞里头
@@ -30,6 +33,7 @@ template<typename _T>void Normalize_Hartley_2d(_T P[][2], int n, _T Norm[][2], _
 template<typename _T>void Normalize_Dev_2d(_T P[][2], int n, _T Norm[][2], _T K[4] = NULL, _T K_Inv[4] = NULL);
 template<typename _T>void Normalize_2d(_T P[][2], int n, _T Norm[][2],
 	Normalize_Method iMethod = Hartley, _T K[4] = NULL, _T K_Inv[4] = NULL);
+template<typename _T>void uv_2_Norm(_T uv[][2], int iCount, _T K[4], int k_Count, _T Norm[][2], _T D[5] = NULL, int bDistort_Corr = 0);
 
 //H矩阵估计函数
 template<typename _T>int Estimate_H_Ref(_T P[][2], _T uv[][2], int n, _T H[3 * 3], int bNormalize = 1, int bUse_SVD = 1);
@@ -99,21 +103,22 @@ template<typename _T>void Get_H_JtE(_T T[][3 * 4], _T K[4], _T D[5], _T P[][2], 
 template<typename _T>void Get_H_JtE(_T T[][3 * 4], _T K[4], _T D[5], _T P[][2], Point_2D<_T> uv[],
 	int iObservation_Count, int iOrder, _T H[], _T JtE[]);
 
-//求E矩阵
+//求E,H矩阵
 template<typename _T>int Estimate_E_Rt_5Point(_T Point_A[5][2], _T Point_B[5][2], _T R[3 * 3], _T t[3], _T E[3 * 3] = NULL);
 template<typename _T>int Estimate_E_T_5Point(_T Point_A[5][2], _T Point_B[5][2], _T T[3 * 4], _T E[3 * 3] = NULL);
 template<typename _T>int Estimate_E_8Point(_T Point_A[8][2], _T Point_B[8][2], _T T[3 * 4], _T E[3 * 3]);
 template<typename _T>int Estimate_F_7Point(_T Point_A[7][2], _T Point_B[7][2], _T F[3][3 * 3], int* piCount=NULL);
 template<typename _T>int Estimate_F_8Point(_T Point_A[8][2], _T Point_B[8][2], _T F[3 * 3]);
 template<typename _T>int Estimate_H_4Point(_T Point_A[4][2], _T Point_B[4][2], _T T[3 * 4]=NULL, _T H[3 * 3]=NULL, _T *pfError=NULL);
-template<typename _T>int Estimate_E_T_nPoint(_T Point_A[5][2], _T Point_B[5][2], int iCount, int* piInlier, _T T[3 * 4] = NULL, _T E[3 * 3] = NULL);
+template<typename _T>int Estimate_E_T_nPoint(_T Point_A[5][2], _T Point_B[5][2], int iCount, int* piInlier, _T T[3 * 4] = NULL, _T E[3 * 3] = NULL, _T eps = 0.005208333333333333f * 0.005208333333333333, int bNormalize = 1);
 template<typename _T>int Elect_R_t(_T Point_A[5][2], _T Point_B[5][2], int iPoint_Count, _T R[][3 * 3], _T t[][3], int iRt_Count, int* piBest_E_Index, _T* pfError=NULL);
 template<typename _T>int Elect_E(_T Point_A[5][2], _T Point_B[5][2], _T E[][3 * 3], int iCount, _T Best_T[3 * 4], int iSample_Count, int* piBest_E_Index);
 template<typename _T>_T Sampson(_T x1[2], _T x2[2], _T E[3 * 3]);	//求Sampson距离
-template<typename _T>int Ransac_E(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], _T E[3 * 3], int bUse_5_Point = 1, int bPoint_In_Place = 1);
+template<typename _T>_T Compute_Squared_Sampson_Error(_T M[3 * 3], _T Point_A[][2], _T Point_B[][2], int iCount, int* piInlier_Count, _T eps, int bSwap_Inlier_Forward = 1);
+template<typename _T>int Ransac_E(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], _T E[3 * 3], int* piCount = NULL, _T* pfError = NULL, int bUse_5_Point = 1, int bPoint_In_Place = 1);
 template<typename _T>int Ransac_H(_T Point_A[][2], _T Point_B[][2], int iCount,	_T T[3 * 4], _T H[3 * 3], int bPoint_In_Place = 0, _T eps = 0.0004);
 
-template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], int bSwap_Inlier_Forward = 1, int iMethod = 2,
+template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], int bSwap_Inlier_Forward = 1, int iTriangulate_Method = 2,
 	_T* pfError = NULL, _T eps = 0.005208333333333333f * 0.005208333333333333);
 template<typename _T>void Sample_XY(_T Point_A[][2], _T Point_B[][2], int iPoint_Count, int iSample_Count);
 //int Ransac_Remain_Count(int iInlier, int iSample_Count, int iMin_Sample_Count);
@@ -127,3 +132,28 @@ template<typename _T>int Triangulate_DLT(_T Pn1[3], _T Pn2[3], _T T1[3 * 4], _T 
 template<typename _T> void Test_E(_T E[3 * 3], _T P1[5][2], _T P2[5][2], int iCount);
 template<typename _T>_T Test_Triangulate(_T P[3], _T T[4 * 4], _T Point_A[2], _T Point_B[2]);
 template<typename _T>_T Test_Triangulate(_T T[4 * 4], _T Point_A[][2], _T Point_B[][2], int iCount);
+
+//Sift
+//int Get_Sift_Feature(const char* pcFile, Point_2D<float>** ppKey_Point, unsigned char (**ppFeature)[128], int* piCount, int o_min = -1);
+int Get_Sift_Feature_1(const char* pcFile, float(**ppKey_Point)[2], unsigned char (**ppFeature)[128], int* piCount, int o_min = -1, float fPeak_Thresh = 2.0 / 300.f);
+//int Get_Sift_Feature(Image oImage, Point_2D<float>** ppKey_Point, unsigned char (**ppFeature)[128], int* piFeature_Count, int o_min = -1);
+int Get_Sift_Feature(Image oImage, float (**ppKey_Point)[2], unsigned char (**ppFeature)[128], int* piFeature_Count, int o_min = -1, float fPeak_Thresh = 2.0 / 300.f);
+int Get_Sift_Feature(const char* pcFile, Point_2D<float>** ppKey_Point, unsigned char (**ppFeature)[128], int* piCount, int o_min=-1,float fPeak_Thresh = 2.0 / 300.f);
+void Sift_Match_2_Image(float Key_Point_A[][2], unsigned char Feature_A[][128], int iCount_A,
+	float Key_Point_B[][2], unsigned char Feature_B[][128], int iCount_B,
+	unsigned short (**ppMatch_Pair)[2], int* piCount, float fPeak_Thresh = 2.0 / 300.f);
+template<typename _T>int Sift_Match_2_Image(const char* pcFile_1, const char* pcFile_2, _T(**ppPoint_1)[2], _T(**ppPoint_2)[2], int* piCount, int o_min = -1, float fPeak_Thresh = 2.0 / 300.f);
+template<typename _T>int Get_2_Image_Pose_by_File(const char File_A[], const char File_B[], _T K[4],
+	_T T[3 * 4], _T(**ppPoint_A)[2] = NULL, _T(**ppPoint_B)[2] = NULL, int* piCount = NULL, _T* pfError = NULL, int o_min = -1, float fPeak_Thresh = 2.0 / 300.f);
+//************************一组位姿库函数****************************/
+
+template<typename _T>int Pose_Base_Init(Pose_Base<_T>* poPose_Base,
+	int iMax_Pose_Count = 20, int iMax_Key_Point_Count = 4096,
+	int iMax_Match_Pose_Count = 40, int iMax_Match_Key_Point_Count = 2000);
+template<typename _T>void Pose_Bsase_Free(Pose_Base<_T>* poBase);
+template<typename _T>int Pose_Base_Add_Feature(Pose_Base<_T>* poBase, float Key_Point[][2], unsigned char Feature[][128], int iCount, int* piPose_ID);
+template<typename _T>int Pose_Base_Add_Match(Pose_Base<_T>* poBase, int iPose_A, int iPose_B, unsigned short Match_Index[][2], unsigned short int iMatch_Index_Count);
+template<typename _T> unsigned char (*Pose_Base_Get_Feature(Pose_Base<_T>* poPose, int iPose_ID, int* piCount))[128];
+template<typename _T> float (*Pose_Base_Get_Key_Point(Pose_Base<_T>* poPose, int iPose_ID, int* piCount))[2];
+template<typename _T1, typename _T2>void Pose_Base_Get_Match_Key_Point(Pose_Base<_T1>* poBase, int iPose_A, int iPose_B, _T2(**ppPoint_A)[2], _T2(**ppPoint_B)[2], int* piCount);
+//************************一组位姿库函数****************************/

@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Test">
+      <UniqueIdentifier>{c687dee1-5ed8-49a4-aa6c-89cc5b8ecc67}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\posix\Buddy_System.c">
@@ -36,11 +39,20 @@
     <ClCompile Include="..\..\esp32\Common_eps32.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Test\Slam_Test_3.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Test\E_8_Point.cpp">
+      <Filter>Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Test\Ransac_Test_1.cpp">
+      <Filter>Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\posix\Sift.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Test\Sift_Test_1.cpp">
+      <Filter>Test</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

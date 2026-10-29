@@ -120,6 +120,9 @@ void Free_Mem_Mgr_GPU(Mem_Mgr* poMem_Mgr);
 //Input: iSize: 新的大小
 void Shrink(Mem_Mgr* poMem_Mgr, void* p, unsigned int iSize);
 
+//给定一个指针，返回这个内存快的大小
+unsigned long long iGet_Size_by_p(Mem_Mgr* poMem_Mgr, void* p);
+
 //尝试将内存向前移，用于整理内存
 void* pMove_2_Front(Mem_Mgr* poMem_Mgr, void* p);
 

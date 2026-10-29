@@ -18,9 +18,11 @@ ESP32_Env oESP32_Env;
 //#define ESP32
 #ifdef ESP32
 //矩阵乘法
-#define Matrix_Multiply(A, ma, na, B, nb,C) dspm_mult_f32(A, B, C, ma, na, nb)
-
-
+//#define Matrix_Multiply(A, ma, na, B, nb,C) dspm_mult_f32(A, B, C, ma, na, nb)
+void Disp_Stack()
+{
+    printf("Remaining stack: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
+}
 /*******************************sg90舵机控制**************************/
 //先不搞了，还没有多余两个电机的情况
 void Init_Motor_mcpwm(int iPin_1, int iPin_2 = -1, int iUnit = 0, int iTimer = 0, int iFreq = 50)
@@ -47,11 +49,33 @@ void Motor_Rotate_mcpwm(float fAngle, int iMotor_ID)
     
 }
 
-void Init_Motor(int iChannel,int iPin, int iFreq, int iBits)
+void Set_sg90_360_Speed(float fSpeed, int iChannel, int iBit)
+{//Speed 在[-1,+1]之间
+    //目前手头上的电机的最小转动数值是+/- 0.07
+    int iQuant = 1 << iBit;
+    fSpeed = Clip3(-1.f, 1.f, fSpeed);
+
+    //归一化为(0,1)之间
+    fSpeed = (fSpeed - (-1.f)) / 2.f;
+    //投影到0.5 - 2.5 之间
+    fSpeed = fSpeed * (2.5f - 0.5f) + 0.5f;
+    //12位量化 到 0-4095上
+    unsigned int iSpeed = (fSpeed / 20.f) * 4095;
+    printf("Channel:%d Speed:%f %d\n", iChannel, fSpeed, iSpeed);
+    ledcWrite(iChannel, iSpeed);
+}
+
+void Init_sg90_360(int iChannel, int iPin, int iFreq, int iBit)
+{//初始化sg90 360度舵机
+    ledcSetup(iChannel, iFreq, iBit);
+    ledcAttachPin(iPin, iChannel);
+}
+
+void Init_sg90_180(int iChannel,int iPin, int iFreq, int iBits)
 {//老板初始化，必须要用Channel，一个channel一个电机
     ledcSetup(iChannel, iFreq, iBits);
     ledcAttachPin(iPin, iChannel);
-    Motor_Rotate(0, iChannel);
+    sg90_180_Rotate(0, iChannel);
 }
 
 int iAngle_To_Signal(float fAngle, float fLeast_Time, float fMost_Time, int iFreq, int Qt)
@@ -64,35 +88,35 @@ int iAngle_To_Signal(float fAngle, float fLeast_Time, float fMost_Time, int iFre
     return (int)(fValue + 0.5f);
 }
 
-void Motor_Rotate(float fAngle, int iChannel)
+void sg90_180_Rotate(float fAngle, int iChannel)
 {//iChannel与舵机一一对应，可以视为舵机ID
     fAngle = Clip3(0, 180, fAngle);
     printf("Channel:%d Angle:%f %d\n",iChannel, fAngle, iAngle_To_Signal(fAngle));
     ledcWrite(iChannel, iAngle_To_Signal(fAngle));
 }
-void Motor_Rotate_Hor(float fAngle)
+void sg90_Rotate_Hor(float fAngle)
 {//相机的水平旋转
     fAngle = Clip3(0, 180, fAngle);
-    Motor_Rotate(fAngle, oESP32_Env.m_iCam_Hor_Channel);
+    sg90_180_Rotate(fAngle, oESP32_Env.m_iCam_Hor_Channel);
     oESP32_Env.m_fCur_Hor_Angle = fAngle;
 }
-void Motor_Rotate_Ver(float fAngle)
+void sg90_Rotate_Ver(float fAngle)
 {//相机的垂直旋转
     fAngle = Clip3(0, 90, fAngle);
-    Motor_Rotate(fAngle, oESP32_Env.m_iCam_Ver_Channel);
+    sg90_180_Rotate(fAngle, oESP32_Env.m_iCam_Ver_Channel);
     oESP32_Env.m_fCur_Ver_Angle = fAngle;
 }
 void Motor_Rotate_Hor_Inc(float fDelta)
 {//增量旋转
     float fAngle = oESP32_Env.m_fCur_Hor_Angle + fDelta;
     fAngle = Clip3(0, 180, fAngle);
-    Motor_Rotate_Hor(fAngle);
+    sg90_Rotate_Hor(fAngle);
 }
 void Motor_Rotate_Ver_Inc(float fDelta)
 {//增量旋转
     float fAngle = oESP32_Env.m_fCur_Ver_Angle + fDelta;
     fAngle = Clip3(0, 90, fAngle);
-    Motor_Rotate_Ver(fAngle);
+    sg90_Rotate_Ver(fAngle);
 }
 /*******************************sg90舵机控制**************************/
 int bSave_Raw_Data_eps32(const char* pcFile, void* pBuffer, int iSize)
@@ -489,8 +513,8 @@ int bInit_esp32_Env(const char Wifi_Usr[], const char Wifi_Pwd[], int iCam_w, in
     if (!iResult)return iResult;
     printf("Cam 5640 Inited\n");
 
-    Init_Motor(iCam_Hor_Channel, iCam_Hor_Pin);
-    Init_Motor(iCam_Ver_Channel, iCam_Ver_Pin);
+    Init_sg90_180(iCam_Hor_Channel, iCam_Hor_Pin);
+    Init_sg90_180(iCam_Ver_Channel, iCam_Ver_Pin);
     printf("Hor Channel:%d Ver Channel:%d\n", iCam_Hor_Channel, iCam_Ver_Channel);
     oESP32_Env = { iCam_Hor_Channel,iCam_Ver_Channel,0,0 };
     
@@ -548,12 +572,12 @@ int iCmd_Rotate_Cam_Server(int iSocket)
     float fCur_Angle;
     if (iDir == 0)
     {
-        Motor_Rotate_Hor(fAngle);
+        sg90_Rotate_Hor(fAngle);
         //Motor_Rotate_Hor_Inc(fAngle);
         fCur_Angle = oESP32_Env.m_fCur_Hor_Angle;
     }else
     {
-        Motor_Rotate_Ver(fAngle);
+        sg90_Rotate_Ver(fAngle);
         //Motor_Rotate_Ver_Inc(fAngle);
         fCur_Angle = oESP32_Env.m_fCur_Ver_Angle;
     }

@@ -6,6 +6,7 @@
 #include "Slam.h"
 
 using namespace std;
+
 typedef struct Contour_Tree_Node { //树形结构
 	int m_iContour_ID;
 	int m_iParent;
@@ -13,11 +14,11 @@ typedef struct Contour_Tree_Node { //树形结构
 	int m_iNext_Sibling;
 }Contour_Tree_Node;
 
-typedef struct Start_Count {
+typedef struct Contour_Start_Count {
 	int m_iContour_ID;
 	int m_iStart;
 	int m_iCount;
-}Start_Count;
+}Contour_Start_Count;
 
 typedef struct Hash_Item {
 	unsigned int A;
@@ -1229,13 +1230,13 @@ static void Add_To_Hash_Table(int Hash_Table[], Hash_Item* Item, int iHash_Size,
 	*piCur_Item = iCur_Item;
 }
 
-static int bGet_Neighbour_Start(Get_Contour_Info oInfo, Start_Count** ppNeighbour_Start_Count, int** ppNeighbour_Block, int* piCur_Neighbour)
+static int bGet_Neighbour_Start(Get_Contour_Info oInfo, Contour_Start_Count** ppNeighbour_Start_Count, int** ppNeighbour_Block, int* piCur_Neighbour)
 {
 	int iHash_Size = oInfo.m_iContour_Count & 1 ? oInfo.m_iContour_Count + 2 : oInfo.m_iContour_Count + 1,
 		* pHash_Table,
 		iCur_Item = 1, bRet = 0;
 	int* pNeighbour_Block = NULL, iCount, iAdd_Hash_Count, iHeight_Minus_1;
-	Start_Count* pNeighbour_Start_Count = NULL;
+	Contour_Start_Count* pNeighbour_Start_Count = NULL;
 	pHash_Table = (int*)pMalloc(iHash_Size * sizeof(int));
 	Hash_Item* pHash_Item = (Hash_Item*)pMalloc(iHash_Size * sizeof(Hash_Item));
 	if (!pHash_Table || !pHash_Item)
@@ -1295,8 +1296,8 @@ static int bGet_Neighbour_Start(Get_Contour_Info oInfo, Start_Count** ppNeighbou
 	}
 	Free(pHash_Table), pHash_Table = NULL;
 
-	pNeighbour_Start_Count = (Start_Count*)pMalloc(oInfo.m_iContour_Count * sizeof(Start_Count));
-	memset(pNeighbour_Start_Count, 0, oInfo.m_iContour_Count * sizeof(Start_Count));
+	pNeighbour_Start_Count = (Contour_Start_Count*)pMalloc(oInfo.m_iContour_Count * sizeof(Contour_Start_Count));
+	memset(pNeighbour_Start_Count, 0, oInfo.m_iContour_Count * sizeof(Contour_Start_Count));
 	pHash_Item++;	//调整到真正开始位置
 	iCount = iCur_Item - 1;
 	for (i = 0; i < iCount; i++)
@@ -1321,7 +1322,7 @@ static int bGet_Neighbour_Start(Get_Contour_Info oInfo, Start_Count** ppNeighbou
 		/*if (i == 26)
 			printf("Here");*/
 
-		Start_Count oStart_Count = pNeighbour_Start_Count[oItem.A];
+		Contour_Start_Count oStart_Count = pNeighbour_Start_Count[oItem.A];
 		pNeighbour_Block[oStart_Count.m_iStart + oStart_Count.m_iCount++] = oItem.B;
 		pNeighbour_Start_Count[oItem.A] = oStart_Count;
 
@@ -1349,7 +1350,7 @@ END:
 	return bRet;
 }
 
-static int bStart_Count_2_Hierachy(Start_Count* pNeighbour_Start_Count, int* pNeighbour_Block, Get_Contour_Result oResult)
+static int bStart_Count_2_Hierachy(Contour_Start_Count* pNeighbour_Start_Count, int* pNeighbour_Block, Get_Contour_Result oResult)
 {
 	//一趟趟扫描表，把点修正
 	int i, j, iUndone_Count, iRound, iCounter, iCur_Item = 0, bRet = 0;
@@ -1376,12 +1377,12 @@ static int bStart_Count_2_Hierachy(Start_Count* pNeighbour_Start_Count, int* pNe
 	{//此处不断调整，直到邻居数为0
 		for (i = 0; i < iUndone_Count; i++)
 		{
-			Start_Count oParent_Start_Count = pNeighbour_Start_Count[pNode_Undone[i]];
+			Contour_Start_Count oParent_Start_Count = pNeighbour_Start_Count[pNode_Undone[i]];
 			int* pParent = pHierachy[oParent_Start_Count.m_iContour_ID];	//oResult.m_pContour[oParent_Start_Count.m_iContour_ID].hierachy;
 			//对Parent所有的孩子进行调整
 			for (j = 0; j < oParent_Start_Count.m_iCount; j++)
 			{
-				Start_Count oChild_Start_Count = pNeighbour_Start_Count[pNeighbour_Block[oParent_Start_Count.m_iStart + j]];
+				Contour_Start_Count oChild_Start_Count = pNeighbour_Start_Count[pNeighbour_Block[oParent_Start_Count.m_iStart + j]];
 				if (oChild_Start_Count.m_iCount == 1)
 				{//该节点的邻居只有一个，以前的孩子都处理完了，那么表示它还有个父节点
 					int* pNode = pHierachy[oChild_Start_Count.m_iContour_ID];	//oResult.m_pContour[oChild_Start_Count.m_iContour_ID].hierachy;
@@ -1425,7 +1426,7 @@ static int bStart_Count_2_Hierachy(Start_Count* pNeighbour_Start_Count, int* pNe
 		//再扫一次，抄到undone中
 		for (i = j = 0; i < iUndone_Count; i++)
 		{
-			Start_Count oParent_Start_Count = pNeighbour_Start_Count[pNode_Undone[i]];
+			Contour_Start_Count oParent_Start_Count = pNeighbour_Start_Count[pNode_Undone[i]];
 			if (oParent_Start_Count.m_iCount >= 2)
 				pNode_Undone[j++] = pNode_Undone[i];
 		}
@@ -1456,7 +1457,7 @@ static int bGen_Hierarchy(Get_Contour_Info oInfo, Contour_Tree_Node** ppTree, Ge
 	//第一步，找到所有的两两联系
 	int iCur_Neighbour;
 
-	Start_Count* pNeighbour_Start_Count;
+	Contour_Start_Count* pNeighbour_Start_Count;
 	int* pNeighbour_Block;
 	if (!bGet_Neighbour_Start(oInfo, &pNeighbour_Start_Count, &pNeighbour_Block, &iCur_Neighbour))
 		return 0;

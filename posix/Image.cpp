@@ -4,6 +4,8 @@
 #endif
 
 #include "Image.h"
+#include "matrix.h"
+
 #ifdef WIN32
 	#include "immintrin.h"
 #endif
@@ -1120,12 +1122,12 @@ void Draw_Point(Image oImage, int x, int y, int r, int R, int G, int B)
 		oImage.m_pChannel[2][y * oImage.m_iWidth + x] = B;
 	return;
 }
-void Gen_Gauss_Filter(int r, float** ppFilter)
-{//根据r的大小计算sigma
+
+void Gen_Gauss_Filter(int r, float* pFilter)
+{
 	float fValue, fSum = 0;
 	int i, j, d = r + r + 1;
 	float fSigma = 0.3f * ((d - 1.f) * 0.5f - 1.f) + 0.8f;
-	float* pFilter = (float*)malloc(d * sizeof(float));
 
 	for (i = 0; i < r; i++)
 	{
@@ -1137,37 +1139,52 @@ void Gen_Gauss_Filter(int r, float** ppFilter)
 	pFilter[i] = (float)exp(-0.5f * fValue * fValue);
 	fSum = fSum * 2 + pFilter[i];
 
-	//Temp Code
-	//for (i = 0; i < r + 1; i++)
-		//printf("%f\n", pFilter[i]);
-
 	fValue = 1.f / fSum;
 	j = d - 1;
 	for (i = 0; i < r; i++, j--)
 		pFilter[j] = (pFilter[i] *= fValue);
 	pFilter[r] *= fValue;
+}
+
+void Gen_Gauss_Filter(int r, float** ppFilter)
+{//根据r的大小计算sigma
+	/*float fValue, fSum = 0;
+	int i, j, d = r + r + 1;
+	float fSigma = 0.3f * ((d - 1.f) * 0.5f - 1.f) + 0.8f;*/
+	float* pFilter = (float*)pMalloc((r*2+1) * sizeof(float));
+	Gen_Gauss_Filter(r, pFilter);
+	//for (i = 0; i < r; i++)
+	//{
+	//	fValue = (float)(i - r) / fSigma;
+	//	pFilter[i] = (float)exp(-0.5f * fValue * fValue);
+	//	fSum += pFilter[i];
+	//}
+	//fValue = (float)(i - r) / fSigma;
+	//pFilter[i] = (float)exp(-0.5f * fValue * fValue);
+	//fSum = fSum * 2 + pFilter[i];
+
+	////Temp Code
+	////for (i = 0; i < r + 1; i++)
+	//	//printf("%f\n", pFilter[i]);
+
+	//fValue = 1.f / fSum;
+	//j = d - 1;
+	//for (i = 0; i < r; i++, j--)
+	//	pFilter[j] = (pFilter[i] *= fValue);
+	//pFilter[r] *= fValue;
 	*ppFilter = pFilter;
 
 	return;
 }
 
-void Gen_Gauss_Filter(int r, float fSigma,float **ppFilter)
+void Gen_Gauss_Filter(int r, float fSigma, float* pFilter)
 {//fSigma对应正态分布中的sigma, 这样就能构造出一个完美的高斯核，其和为1
 //此处还要进一步搞，fSigma的取值决定了核大小
-	int i,j, d = r + r + 1;
-	float* pFilter = (float*)malloc(d * sizeof(float));
-	float fValue,fSum=0;
-
-	////感觉这个核做得太费事，做一般就够了
-	//for (i = 0; i < d; i++)
-	//{
-	//	fValue = (float)(i - r) / fSigma;
-	//	pFilter[i] = exp(-0.5f * fValue * fValue);
-	//	fSum += pFilter[i];
-	//}
-	//fValue = 1.f / fSum;
-	//for (i = 0; i < d; i++)
-	//	pFilter[i] *= fValue;
+	int i, j, d = r + r + 1;
+	float fValue, fSum = 0;
+	const float eps = (float)1e-10;
+	if (fSigma < eps)
+		fSigma = eps;
 
 	for (i = 0; i < r; i++)
 	{
@@ -1175,18 +1192,33 @@ void Gen_Gauss_Filter(int r, float fSigma,float **ppFilter)
 		pFilter[i] = (float)exp(-0.5f * fValue * fValue);
 		fSum += pFilter[i];
 	}
-
 	fValue = (float)(i - r) / fSigma;
-	pFilter[i] =(float)exp(-0.5f * fValue * fValue);
-	fSum = fSum*2+ pFilter[i];
+	pFilter[i] = (float)exp(-0.5f * fValue * fValue);
+	fSum = fSum * 2 + pFilter[i];
 
 	fValue = 1.f / fSum;
 	j = d - 1;
-	for (i = 0; i < r; i++,j--)
+	for (i = 0; i < r; i++, j--)
 		pFilter[j] = (pFilter[i] *= fValue);
 	pFilter[r] *= fValue;
+	return;
+}
+
+void Gen_Gauss_Filter(int r, float fSigma,float **ppFilter)
+{//fSigma对应正态分布中的sigma, 这样就能构造出一个完美的高斯核，其和为1
+//此处还要进一步搞，fSigma的取值决定了核大小
+	int/* i,j,*/ d = r + r + 1;
+	if (ppFilter)
+		*ppFilter = NULL;
+
+	float* pFilter = (float*)pMalloc(d * sizeof(float));
+	if (!pFilter)
+	{
+		printf("Fail to allocate memory in Gen_Gauss_Filter\n");
+		return;
+	}
+	Gen_Gauss_Filter(r, fSigma, pFilter);
 	*ppFilter = pFilter;
-	
 	return;
 }
 
@@ -1262,6 +1294,7 @@ void Transpose_AVX512(float* pSource, int iWidth, int iHeight, float* pDest)
 	}
 	return;
 }
+
 void _Gause_Filter_AVX512(float* pSource, int iWidth, int iHeight, float* pDest, int r, float* pFilter)
 {
 	__m512 Pixel_0_16, Pixel_1_16, Sum_16;
@@ -1273,13 +1306,12 @@ void _Gause_Filter_AVX512(float* pSource, int iWidth, int iHeight, float* pDest,
 	int x, y, y1, i;	// , d = r + r + 1;
 	//int d_minus_1 = d - 1;
 	float* pFilter_1 = &pFilter[r];
-
 	//对列方向做一维高斯滤波
 	for (y = 0; y < iHeight; y++)
 	{//大体上，像素处理的过程是先行后列
 		for (x = 0; x < iWidth; x += 16)
 		{
-			Sum_16 = _mm512_set1_ps(0.f);	//表示将Sum_16中16个数据清空
+			Sum_16 = _mm512_mul_ps(_mm512_loadu_ps(&pSource[x + iWidth * y]), _mm512_set1_ps(*pFilter_1));
 			for (i = 1; i <= r; i++)
 			{//以自己为中心，向上下两个方向逐步散出去
 				y1 = y - i;	//y1表示自己上面第i行，Pixel_0_16表示从内存中连续读入16个数据进寄存器
@@ -1290,9 +1322,6 @@ void _Gause_Filter_AVX512(float* pSource, int iWidth, int iHeight, float* pDest,
 				//上面第i个数据与限免第i个数据对应同一个权值，这是由高斯核的对成性决定的。
 				Sum_16 = _mm512_add_ps(Sum_16, _mm512_mul_ps(_mm512_add_ps(Pixel_0_16, Pixel_1_16), _mm512_set1_ps(pFilter_1[i])));
 			}
-			//以下两句把自己也加上
-			Pixel_0_16 = _mm512_loadu_ps(&pSource[x + iWidth * y]);
-			Sum_16 = _mm512_add_ps(Sum_16, _mm512_mul_ps(Pixel_0_16, _mm512_set1_ps(*pFilter_1)));
 
 			//算到这里，16个加权求和已经得到，横着存回到目标内存位置中
 			if (x + 16 > iWidth)	//这里是不够16的情况下，由
@@ -1305,15 +1334,58 @@ void _Gause_Filter_AVX512(float* pSource, int iWidth, int iHeight, float* pDest,
 
 void Gauss_Filter_AVX512(float* pSource, int iWidth, int iHeight, float* pDest, float *pAux, int r, float* pFilter)
 {//利用一个临时缓冲区pAux进行交换
+	//注意，按时已经优无可优，转至已经达到最快
 	//依旧是行列分离的方法来做，所以要做两次,此处是第一次，高斯核列方向上做
 	_Gause_Filter_AVX512(pSource, iWidth, iHeight, pAux, r, pFilter);
-	//转置一下，内存的访问速度决定了经过这一步更快
-	Transpose_AVX512(pAux, iWidth, iHeight, pDest);
+	Matrix_Transpose(pAux, iHeight,iWidth, pDest);
+
 	//转置完了以后，图转换为h*w的形状，用同样的方法做第二次，高斯核还是在列方向
 	_Gause_Filter_AVX512(pDest, iHeight, iWidth,pAux, r, pFilter);
-	//再转置，恢复原图
-	Transpose_AVX512(pAux, iHeight, iWidth, pDest);
+	Matrix_Transpose(pAux, iWidth, iHeight, pDest);
 	return;
+}
+
+int Gauss_Filter_AVX512(float* pSource, int iWidth, int iHeight, int r, float* pDest, float fSigma, float Aux[], float Filter[])
+{//友好的高斯滤波接口
+	//*************非常奇怪，用外部Aux会快很多*********************/
+	float* pAux, * pFilter, * pBuffer = NULL;
+
+	{//分配内存
+		int iSize = 0;
+		float* pCur=NULL;
+		if (!Aux)iSize = ALIGN_SIZE_16(iWidth * iHeight);
+		if (!Filter)iSize += ALIGN_SIZE_16(r * 2 + 1);
+		if (iSize)
+		{
+			pCur = pBuffer = (float*)pMalloc(iSize * sizeof(float));
+			if (!pBuffer)
+			{
+				printf("Fail to allocate memory\n");
+				return 0;
+			}
+		}
+		if (Filter)
+			pFilter = Filter;
+		else
+			pFilter = pCur, pCur += ALIGN_SIZE_16(r * 2 + 1);
+		if (Aux)
+			pAux = Aux;
+		else
+			pAux = pCur;
+	}
+
+	//造核
+	if (fSigma >= 0)
+		Gen_Gauss_Filter(r, fSigma, pFilter);
+	else
+		Gen_Gauss_Filter(r, pFilter);
+
+	//滤波
+	Gauss_Filter_AVX512(pSource, iWidth, iHeight, pDest,pAux,r,pFilter);
+	if (pBuffer)
+		Free(pBuffer);
+
+	return 1;
 }
 #endif
 
@@ -1376,13 +1448,58 @@ template<typename _T>void RGB_2_Gray(Image oImage, _T* pImage)
 {//RGB 转换灰度图，grey=0.299r+0.587g+0.114b, 再/255.f, 对不上
 //另一条转换公式： grey=0.2126r +0.7152g +0.0722b
 	int i,iSize = oImage.m_iWidth * oImage.m_iHeight;
+	int iSize_Align_16 = (iSize >> 4) << 4;;
+#ifndef  ESP32
 	if (oImage.m_iChannel_Count >= 3)
-		for (i = 0; i < iSize; i++)
-			pImage[i] = ((_T)round(0.2126f * oImage.m_pChannel[0][i] + 0.7152 * oImage.m_pChannel[1][i] + 0.0722f * oImage.m_pChannel[2][i])) / 255.f;
-	else if (oImage.m_iChannel_Count == 1)
-		for (i = 0; i < iSize; i++)
-			pImage[i] = oImage.m_pChannel[0][i]/255.f;
+	{
+		//用AVX比纯c 快10倍
+		int i;
+		for (i = 0; i < iSize_Align_16; i += 16)
+		{
+			__m128i Color_c = _mm_loadu_epi64((__m128i const*) & oImage.m_pChannel[0][i]);
+			__m512i Color_i = _mm512_cvtepu8_epi32(Color_c);
+			__m512 Color_f = _mm512_cvtepi32_ps(Color_i);
+			__m512 Sum = _mm512_mul_ps(Color_f, _mm512_set1_ps(0.2126f));
 
+			Color_c = _mm_loadu_epi64((__m128i const*) & oImage.m_pChannel[1][i]);
+			Color_i = _mm512_cvtepu8_epi32(Color_c);
+			Color_f = _mm512_cvtepi32_ps(Color_i);
+			Color_f = _mm512_mul_ps(Color_f, _mm512_set1_ps(0.7152f));
+			Sum = _mm512_add_ps(Color_f, Sum);
+
+			Color_c = _mm_loadu_epi64((__m128i const*) & oImage.m_pChannel[2][i]);
+			Color_i = _mm512_cvtepu8_epi32(Color_c);
+			Color_f = _mm512_cvtepi32_ps(Color_i);
+			Color_f = _mm512_mul_ps(Color_f, _mm512_set1_ps(0.0722f));
+			Sum = _mm512_add_ps(Color_f, Sum);
+			Sum = _mm512_mul_ps(Sum, _mm512_set1_ps(1.f / 255.f));
+			_mm512_storeu_ps(&pImage[i], Sum);
+		}
+		for (; i < iSize; i++)
+			pImage[i] = ((_T)(0.2126f * oImage.m_pChannel[0][i] + 0.7152 * oImage.m_pChannel[1][i] + 0.0722f * oImage.m_pChannel[2][i])) / 255.f;
+	}else if (oImage.m_iChannel_Count == 1)
+	{
+		for (i = 0; i < iSize_Align_16; i += 16)
+		{
+			__m128i Color_Gray = _mm_loadu_epi64((__m128i const*)&oImage.m_pChannel[0][i]);
+			__m512 Color_f = _mm512_mul_ps(_mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(Color_Gray)), _mm512_set1_ps(1.f / 255.f));
+			_mm512_storeu_ps(&pImage[i], Color_f);
+		}
+		for (; i < iSize; i++)
+			pImage[i] = oImage.m_pChannel[0][i] / 255.f;
+	}
+#else
+	if (oImage.m_iChannel_Count >= 3)
+	{
+		for (i = 0; i < iSize; i++)
+			pImage[i] = ((_T)(0.2126f * oImage.m_pChannel[0][i] + 0.7152 * oImage.m_pChannel[1][i] + 0.0722f * oImage.m_pChannel[2][i])) / 255.f;
+	}else
+	{
+		for (i = 0; i < iSize; i++)
+			pImage[i] = oImage.m_pChannel[0][i] / 255.f;
+	}
+		//pImage[i] = ((_T)round(0.2126f * oImage.m_pChannel[0][i] + 0.7152 * oImage.m_pChannel[1][i] + 0.0722f * oImage.m_pChannel[2][i])) / 255.f;
+#endif // ! EPS32
 	return;
 }
 
@@ -1392,26 +1509,11 @@ template<typename _T>void RGB_2_Gray(Image oImage, _T** ppImage)
 	*ppImage = pImage = (_T*)pMalloc(oImage.m_iWidth * oImage.m_iHeight * sizeof(_T));
 	if (!pImage)
 		return;
-
 	RGB_2_Gray(oImage, pImage);
 }
 
 int RGB_2_Gray_1(Image oImage, Image oDest)
 {
-	/*float* pImage = NULL,*pImage_Cur;
-	RGB_2_Gray(oImage, &pImage);
-	if (!pImage)
-	{
-		oDest = {};
-		return 0;
-	}
-	int iSize = oImage.m_iWidth * oImage.m_iHeight;
-	unsigned char* pCur = oDest.m_pChannel[0], * pEnd = pCur + iSize;
-	pImage_Cur = pImage;
-	while (pCur < pEnd)
-		*(pCur++) = (unsigned char)(*(pImage_Cur++) * 0xFF);
-	Free(pImage);*/
-
 	int i, iSize = oImage.m_iWidth * oImage.m_iHeight;
 	if (oImage.m_iChannel_Count >= 3)
 	{
@@ -1540,6 +1642,7 @@ void Concat_Image(Image oA, Image oB, Image* poC, int iFlag)
 	*poC = oC;
 	return;
 }
+
 template<typename _T>void Draw_Match_Point(_T Point_1[][2], _T Point_2[][2], int iCount, Image oImage)
 {
 	int iOrg_Image_Width = oImage.m_iWidth / 2;
@@ -3714,4 +3817,3 @@ template<typename _T> void approxPolyDP(_T Source_Point[][2], int iSource_Count,
 		Free(Stack);
 	return;
 }
-

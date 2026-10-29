@@ -13,23 +13,32 @@ template<typename _T>void K9_2_K4(_T K9[9],_T K4[4])
 template void K4_2_K9(float K4[9], float K9[4]);
 template void K4_2_K9(double K4[9], double K9[4]);
 template<typename _T>void K4_2_K9(_T K4[9], _T K9[4])
-{
-	memset(K9, 0, 9 * sizeof(_T));
-	K9[0] = K4[0];
+{// 安全函数，源可以等于目的
+	//memset(K9, 0, 9 * sizeof(_T));
+	K9[8] = 1;
+	K9[5] = K4[3];
 	K9[4] = K4[1];
 	K9[2] = K4[2];
-	K9[5] = K4[3];
-	K9[8] = 1;
+	K9[0] = K4[0];
 }
 
-template void K3_2_K9(double K3[9], double K9[4]);
-template<typename _T>void K3_2_K9(_T K3[9], _T K9[4])
-{
-	memset(K9, 0, 9 * sizeof(_T));
-	K9[0] = K9[4] = K3[0];
-	K9[2] = K3[1];
-	K9[5] = K3[2];
+template void K3_2_K9(double K3[3], double K9[4]);
+template<typename _T>void K3_2_K9(_T K3[3], _T K9[4])
+{//安全函数，源可以等于目的
+	//memset(K9, 0, 9 * sizeof(_T));
 	K9[8] = 1;
+	K9[5] = K3[2];
+	K9[2] = K3[1];
+	K9[0] = K9[4] = K3[0];
+	K9[1] = K9[3] = K9[6] = K9[7] = 0;
+}
+
+template void K3_2_K4(double K3[3], double K9[4]);
+template<typename _T>void K3_2_K4(_T K3[3], _T K4[4])
+{//从算法看出，这是安全函数，源可以都等于目标
+	K4[3] = K3[2];
+	K4[2] = K3[1];
+	K4[0] = K4[1] = K3[0];
 }
 
 template void Get_K9_by_eq_focal(float eq_f, float w, float h, float K[3 * 3]);
@@ -112,8 +121,9 @@ template<typename _T>void K3_Inv(_T K[3], _T K_Inv[3])
 	return;
 }
 
+template void K4_Inv(double K[4], double K_Inv[4]);
 template<typename _T>void K4_Inv(_T K[4], _T K_Inv[4])
-{//求K3投影矩阵的逆
+{//求K3投影矩阵的逆，安全函数，源可以等于目标
 //将 K的最简形式拆开，	u = (fx * px)/pz + cx
 //						v = (fy * py)/pz + cy
 //	px = pz * (u - cx) / fx = pz * (u * 1 / f - cx / f)
@@ -122,10 +132,10 @@ template<typename _T>void K4_Inv(_T K[4], _T K_Inv[4])
 //	px = pz *	1/fx	0		-cx/fx *	u
 //	py			0		1/fx	-cy/fy		v
 //	1			0		0		1			1
-	K_Inv[0] = 1.f / K[0];
-	K_Inv[1] = 1.f / K[1];
 	K_Inv[2] = -K[2] / K[0];
 	K_Inv[3] = -K[3] / K[1];
+	K_Inv[0] = 1.f / K[0];
+	K_Inv[1] = 1.f / K[1];
 }
 
 template<typename _T>void Homo_Normalize(_T V0[], int n, _T V1[])
@@ -133,6 +143,36 @@ template<typename _T>void Homo_Normalize(_T V0[], int n, _T V1[])
 	_T fCoeff = V0[n - 1];
 	for (int i = 0; i < n - 1; i++)
 		V1[i] = V0[i] / fCoeff;
+	return;
+}
+
+template<typename _T>void uv_2_Norm(_T uv[2], _T K4[4], _T Norm[2], _T D[5], int bDistort_Corr)
+{
+	//pnx = (u - cx) / fx = u / fx - cx / fx
+	Norm[0] = (uv[0] - K4[2]) / K4[0];
+	Norm[1] = (uv[1] - K4[3]) / K4[1];
+
+	//反畸变
+	if (bDistort_Corr)
+		Get_Pn_by_Pd(Norm, D, Norm);
+}
+
+template void uv_2_Norm(float uv[][2], int iCount, float K[4], int k_Count, float Norm[][2], float D[5], int bDistort_Corr);
+template void uv_2_Norm(double uv[][2], int iCount, double K[4], int k_Count, double Norm[][2], double D[5], int bDistort_Corr);
+template<typename _T>void uv_2_Norm(_T uv[][2], int iCount, _T K[4], int k_Count, _T Norm[][2], _T D[5], int bDistort_Corr)
+{//	u = pnx * fx + cx
+//	v = pny * fy + cy
+//		
+//		故此，从像素平面到归一化平面坐标
+//		pnx = (u - cx) / fx = u / fx - cx / fx
+//		pny = (v - cy) / fy = v / fy - cy / fy
+// 
+//		1 =		1 / fx		0			- cx / fx * u
+//		0		1 / fy		- cy / fy	v				= K(-1) * uv
+//		0		0			1			1
+	for (int i = 0; i < iCount; i++)
+		uv_2_Norm(uv[i], K, Norm[i], D, bDistort_Corr);
+
 	return;
 }
 
@@ -161,6 +201,32 @@ template<typename _T>void Normalize_by_B_Box_2d(_T P[][2], int n,
 
 	if (K)
 		memcpy(K, K1, 3 * sizeof(_T));
+	if (K_Inv)
+		K3_Inv(K1, K_Inv);
+	return;
+}
+
+template<typename _T>void Normalize_Hartley_sqr_2d(_T P[][2], int n,
+	_T Norm[][2], _T K[3], _T K_Inv[]=NULL)
+{//用Hartley 归一化方法
+	const _T sqrt_2 = (_T)sqrt(2);
+
+	//先找期望
+	_T E[2];
+	Get_E_2d(P, n, E);
+
+	_T fDev = 0;
+	for (int i = 0; i < n; i++)
+		fDev += fGet_Distance(P[i], E, 2);
+	fDev = (_T)sqrt(fDev / n);
+	_T K1[3] = { sqrt_2 / fDev,-K1[0] * E[0], -K1[0] * E[1] };
+
+	for (int i = 0; i < n; i++)
+		K3_Proj(K1, P[i], Norm[i], 0);
+
+	if (K)
+		memcpy(K, K1, 3 * sizeof(_T));
+
 	if (K_Inv)
 		K3_Inv(K1, K_Inv);
 	return;
@@ -1041,7 +1107,7 @@ template<typename _T>static void Get_Pn_by_Pd_JtJ_JtE(_T J[2 * 2], _T E[2],
 template int Get_Pn_by_Pd(double Pd[2], double Distort[5], double Pn[2]);
 template<typename _T>int  Get_Pn_by_Pd(_T Pd[2], _T Distort[5], _T Pn[2])
 {//用畸变值xd 反推归一化平面上的真实值
-	_T fError, fPre_Error = MAX_FLOAT, fError_Delta, eps = 1e-15;
+	_T fError, fPre_Error = MAX_FLOAT, fError_Delta, eps = (_T)1e-15;
 	const int iMax_Iter = 30;
 	int bRet = 0, iIter, iResult;
 
@@ -1910,8 +1976,8 @@ template<typename _T>static int Get_E_Solution(_T Az[], _T X[10][3], int* piCoun
 	for (int i = 0; i < iCount; i++)
 	{
 		//求关于z 的特征向量
-		_T V[10];   // , AzV[10];
-		int iVector_Count;
+		_T V[10*10];   // , AzV[10];
+		int iVector_Count=0;
 		Get_Eigen_Vector_by_Value_Real(Az, 10, x1[i].real, V, &iVector_Count);
 		if (iVector_Count > 1)
 		{
@@ -1950,14 +2016,24 @@ template<typename _T>static int Get_E_Solution(_T Az[], _T X[10][3], int* piCoun
 	//Disp((_T*)X, iCount, 3,"xyz");
 	if (*piCount)
 		*piCount = iCount;
+
 	return iResult;
 }
 
 template<typename _T>static void E_2_R_t(_T E[], _T R[2][3 * 3], _T t[3])
 {//注意，此处求得的t可以直接乘以两相机之间的距离，即可得到真实的位移
+	static int iCount = 0;
 	_T U[3 * 3], Vt[3 * 3], S[3 * 3];
 	//Disp(E, 3, 3, "E");
 	int iResult = SVD_Decompose<_T>(E, 3, S, U, Vt);
+
+	/*if (iCount == 10)
+	{
+		Disp(U, 3, 3, "U");
+		Disp(S, 3, 1, "S");
+		Disp(Vt, 3, 3, "Vt");
+	}*/
+
 	//W =   0	-1	0
 	//      1	0	0
 	//      0	0	1
@@ -1967,9 +2043,13 @@ template<typename _T>static void E_2_R_t(_T E[], _T R[2][3 * 3], _T t[3])
 
 	_T Temp[3 * 3];
 
+
 	//生成 R = U * W * V'
 	Matrix_Multiply_3x3<_T>(U, W, Temp);
 	Matrix_Multiply_3x3<_T>(Temp, Vt, R[0]);
+	//if(iCount==10)
+		//Disp(R[0], 3, 3, "R0");
+	//printf("%f\n", fGet_Determinant(R[0], 3));
 
 	//t = U*W**S*U'
 	memset(S, 0, 9 * sizeof(_T));
@@ -1988,6 +2068,7 @@ template<typename _T>static void E_2_R_t(_T E[], _T R[2][3 * 3], _T t[3])
 	W[1] = 1, W[3] = -1;
 	Matrix_Multiply_3x3<_T>(U, W, Temp);
 	Matrix_Multiply_3x3<_T>(Temp, Vt, R[1]);
+	//printf("%f\n", fGet_Determinant(R[1], 3));
 	Matrix_Multiply_3x3(Temp, S_Ut, Temp);
 	Vee(Temp, t);
 
@@ -1998,6 +2079,7 @@ template<typename _T>static void E_2_R_t(_T E[], _T R[2][3 * 3], _T t[3])
 
 	Matrix_Multiply_3x3(U, S, E);
 	Matrix_Multiply_3x3(E, Vt, E);
+	iCount++;
 	return;
 }
 
@@ -2017,6 +2099,11 @@ template<typename _T>int Elect_E(_T Point_A[5][2], _T Point_B[5][2], _T E[][3 * 
 		Gen_Pose_By_R_t(R[0], t1, T2[1]);
 		Gen_Pose_By_R_t(R[1], t0, T2[2]);
 		Gen_Pose_By_R_t(R[1], t1, T2[3]);
+		/*Disp(T2[0], 3, 4, "T0");
+		Disp(T2[1], 3, 4, "T1");
+		Disp(T2[2], 3, 4, "T2");
+		Disp(T2[3], 3, 4, "T3");*/
+
 		for (int k = 0; k < 4; k++)
 		{
 			_T* pT2 = T2[k];
@@ -2152,10 +2239,6 @@ template<typename _T>int Estimate_E_T_5Point(_T Point_A[5][2], _T Point_B[5][2],
 		goto END;
 
 	//Disp((_T*)pE, iCount, 9, "E");
-
-	//for(int i=0;i<iCount;i++)
-		//Test_E(pE[i], Point_A, Point_B,5);
-
 	int iBest_E_Index;
 	if(!(iResult = Elect_E<_T>(Point_A, Point_B, pE, iCount, T,5, &iBest_E_Index)))
 		goto END;
@@ -2181,34 +2264,170 @@ template<typename _T>int Estimate_E_Rt_5Point(_T Point_A[5][2], _T Point_B[5][2]
 	return iResult;
 }
 
-template int Estimate_E_T_nPoint(double Point_A[5][2], double Point_B[5][2], int iCount, int* piInlier, double T[3 * 4], double E[3 * 3]);
-template<typename _T>int Estimate_E_T_nPoint(_T Point_A[5][2], _T Point_B[5][2], int iCount, int* piInlier, 
-	_T T[3 * 4], _T E[3 * 3])
+//template int Estimate_E_T_nPoint(double Point_A[5][2], double Point_B[5][2], int iCount, int* piInlier, double T[3 * 4], double E[3 * 3],double eps);
+//template<typename _T>int Estimate_E_T_nPoint(_T Point_A[][2], _T Point_B[][2], int iCount, int* piInlier, 
+//	_T T[3 * 4], _T E[3 * 3],_T eps)
+//{//用超过8点估计E矩阵，注意了，这是开放算法，不保证所有点对都及格，有些会成为外点，甚至
+//	//外点比内殿更多
+//
+//	int bRet = 0, iMax_Inlier = 0, iBest_E_Index = -1;
+//	_T fError_Sum,* pA = (_T*)pMalloc(iCount * 9 * sizeof(_T));
+//	if (!pA)
+//		goto END;
+//	for (int i = 0; i < iCount; i++)
+//		Gen_E_xEy_row(Point_A[i], Point_B[i], &pA[i * 9]);
+//	
+//	//Disp(pA, iCount, 9, "A");
+//	//Disp(Point_A[43], 2, 2, "A");
+//	//Disp(Point_B[44], 2, 2, "B");
+//
+//	int iResult;
+//	_T x[8 * 9];
+//	//注意，接出来的不是E,只是一般矩阵。从一般矩阵到E还需经过
+//	//SVD 分解，合成
+//	Solve_Linear_Contradictory<_T>(pA, iCount, 9, NULL, x, &iResult);
+//	if (!iResult)
+//		return 0;
+//	//Disp(x, 9, 1, "x");
+//	//Test_Linear_Contradictory<_T>(pA, iCount, 9, x, NULL);
+//	//接着需要分解R,t
+//	_T R[2][3 * 3], t0[3], t1[3], T2[4][4 * 4];
+//	E_2_R_t(x, R, t0);
+//	//Test_E(x, Point_A, Point_B, iCount);
+//
+//	//Disp(x, 3, 3, "E");
+//	t1[0] = -t0[0], t1[1] = -t0[1], t1[2] = -t0[2];
+//	/*Disp(R[0], 3, 3, "R0");
+//	Disp(R[1], 3, 3, "R1");
+//	Disp(t0, 3, 1, "t0");
+//	Disp(t1, 3, 1, "t1");*/
+//
+//	Gen_Pose_By_R_t(R[0], t0, T2[0]);
+//	Gen_Pose_By_R_t(R[0], t1, T2[1]);
+//	Gen_Pose_By_R_t(R[1], t0, T2[2]);
+//	Gen_Pose_By_R_t(R[1], t1, T2[3]);
+//
+//	/*Disp(T2[0], 3, 4, "T0");
+//	Disp(T2[1], 3, 4, "T1");
+//	Disp(T2[2], 3, 4, "T2");
+//	Disp(T2[3], 3, 4, "T3");*/
+//
+//	for (int k = 0; k < 4; k++)
+//	{
+//		_T* pT2 = T2[k], P[4];
+//		int bInvalid = 0, iInlier = 0;
+//		fError_Sum = 0;
+//
+//		_T R3[3 * 3], t3[3];    //带个3表示用于三角化
+//		Get_R_t(pT2, R3, t3);
+//		
+//		for (int j = 0; j < iCount; j++)
+//		{
+//			Triangulate_Cramer<_T>(Point_A[j], Point_B[j], pT2, P);
+//			if (P[2] <= 0)
+//				continue;
+//			
+//			_T fError,P2[3];
+//			TP(pT2, P, P2);
+//			fError = Test_Triangulate(P, pT2, Point_A[j], Point_B[j]);
+//			if (fError >= eps)
+//				continue;
+//
+//			fError_Sum += fError;
+//			if (P2[2] <= 0)
+//				continue;
+//
+//			iInlier++;
+//		}
+//		if (iInlier > iMax_Inlier)
+//		{
+//			iMax_Inlier = iInlier;
+//			iBest_E_Index = k;
+//		}
+//	}
+//
+//	if (E)
+//		memcpy(E, x, 3 * 3 * sizeof(_T));
+//	if (T)
+//		memcpy(T, T2[iBest_E_Index], 3 * 4 * sizeof(_T));
+//	if (piInlier)
+//		*piInlier = iMax_Inlier;
+//
+//	bRet = 1;
+//END:
+//	Free(pA);
+//	return bRet;
+//}
+
+
+
+template int Estimate_E_T_nPoint(double Point_A[5][2], double Point_B[5][2], int iCount, int* piInlier, double T[3 * 4], double E[3 * 3], double eps, int bNormalize);
+template<typename _T>int Estimate_E_T_nPoint(_T Point_A[][2], _T Point_B[][2], int iCount, int* piInlier,
+	_T T[3 * 4], _T E[3 * 3], _T eps, int bNormalize)
 {//用超过8点估计E矩阵，注意了，这是开放算法，不保证所有点对都及格，有些会成为外点，甚至
 	//外点比内殿更多
-
+	//一般情况下要归一化，bNormalize这个留着用于数据分析
 	int bRet = 0, iMax_Inlier = 0, iBest_E_Index = -1;
-	_T fError_Sum,* pA = (_T*)pMalloc(iCount * 9 * sizeof(_T));
+	_T(*pNorm_A)[2], (*pNorm_B)[2], K_A[3], K_B[3];
+	_T fError_Sum, * pA;
+	pA = (_T*)pMalloc((bNormalize ? (iCount * 9 + iCount * 2 * 2) : (iCount * 9)) * sizeof(_T));
 	if (!pA)
 		goto END;
-	for(int i=0;i<iCount;i++)
-		Gen_E_xEy_row(Point_A[i], Point_B[i], &pA[i * 9]);
-	//Disp(pA, iCount, 9, "A");
+	
+	if(bNormalize)
+	{
+		pNorm_A = (_T(*)[2])(pA + iCount * 9);
+		pNorm_B = pNorm_A + iCount;
+		Normalize_Hartley_sqr_2d(Point_A, iCount, pNorm_A, K_A);
+		Normalize_Hartley_sqr_2d(Point_B, iCount, pNorm_B, K_B);
+		for (int i = 0; i < iCount; i++)
+			Gen_E_xEy_row(pNorm_A[i], pNorm_B[i], &pA[i * 9]);
+	}else
+		for (int i = 0; i < iCount; i++)
+			Gen_E_xEy_row(Point_A[i], Point_B[i], &pA[i * 9]);
 
+	//Disp((_T*)pA, iCount, 9, "A");
 	int iResult;
 	_T x[8 * 9];
-	Solve_Linear_Contradictory<_T>(pA, iCount, 9, NULL, x, &iResult);
-	if (!iResult)
-		return 0;
+	//注意，接出来的不是E,只是一般矩阵。从一般矩阵到E还需经过
+	//SVD 分解，合成
+	if(iCount==8)
+	{
+		int iSolution_Count;
+		iResult = Solve_Linear_Solution_Construction<_T>(pA, iCount, 9, NULL, x, &iSolution_Count);
+		if (!iResult || iSolution_Count != 1)
+			return 0;
+	}else
+	{
+		Solve_Linear_Contradictory<_T>(pA, iCount, 9, NULL, x, &iResult);
+		if (!iResult)
+			return 0;
+	}
 
 	//接着需要分解R,t
 	_T R[2][3 * 3], t0[3], t1[3], T2[4][4 * 4];
-	E_2_R_t(x, R, t0);
+	_T K9[3*3],E_raw[3 * 3];
+	if(bNormalize)
+	{
+		//E_raw = M_2' * E * M_1
+		K3_2_K9(K_B, K9);
+		At_x_B(K9, 3, 3, x, 3, E_raw);
+		K3_2_K9(K_A, K9);
+		Matrix_Multiply_3x3(E_raw, K9, E_raw);
+	}else
+		memcpy(E_raw, x, 3 * 3 * sizeof(_T));
+	//Disp(E_raw, 3, 3, "E_raw");
+
+	E_2_R_t(E_raw, R, t0);
+	//Test_E(x, Point_A, Point_B, iCount);
+
+	//Disp(x, 3, 3, "E");
 	t1[0] = -t0[0], t1[1] = -t0[1], t1[2] = -t0[2];
 	Gen_Pose_By_R_t(R[0], t0, T2[0]);
 	Gen_Pose_By_R_t(R[0], t1, T2[1]);
 	Gen_Pose_By_R_t(R[1], t0, T2[2]);
 	Gen_Pose_By_R_t(R[1], t1, T2[3]);
+
 	for (int k = 0; k < 4; k++)
 	{
 		_T* pT2 = T2[k], P[4];
@@ -2217,16 +2436,23 @@ template<typename _T>int Estimate_E_T_nPoint(_T Point_A[5][2], _T Point_B[5][2],
 
 		_T R3[3 * 3], t3[3];    //带个3表示用于三角化
 		Get_R_t(pT2, R3, t3);
-		
+
 		for (int j = 0; j < iCount; j++)
 		{
 			Triangulate_Cramer<_T>(Point_A[j], Point_B[j], pT2, P);
+			//Triangulate_DLT<_T>(Point_A[j], Point_B[j], NULL,pT2, P);
+			Triangulate_Gauss<_T>(Point_A[j], Point_B[j],NULL, pT2, P);
+
 			if (P[2] <= 0)
 				continue;
-			
-			_T P2[3];
+
+			_T fError, P2[3];
 			TP(pT2, P, P2);
-			fError_Sum += Test_Triangulate(P, pT2, Point_A[j], Point_B[j]);
+			//fError = Test_Triangulate(P, pT2, Point_A[j], Point_B[j]);
+			fError = Test_Triangulate(P, pT2, Point_A[j], Point_B[j]);
+			if (fError >= eps && iCount > 8)
+				continue;
+			fError_Sum += fError;
 			if (P2[2] <= 0)
 				continue;
 
@@ -2238,14 +2464,20 @@ template<typename _T>int Estimate_E_T_nPoint(_T Point_A[5][2], _T Point_B[5][2],
 			iBest_E_Index = k;
 		}
 	}
-
-	if (E)
-		memcpy(E, x, 3 * 3 * sizeof(_T));
+	if (iMax_Inlier < 8)
+		goto END;
+	
 	if (T)
 		memcpy(T, T2[iBest_E_Index], 3 * 4 * sizeof(_T));
 	if (piInlier)
 		*piInlier = iMax_Inlier;
-
+	if (E)
+	{//用最优位姿反推一个E出来， E = t^ * R
+		_T R[3 * 3], t[3],hat[3*3];    //带个3表示用于三角化
+		Get_R_t(T2[iBest_E_Index], R, t);
+		Hat(t, hat);
+		Matrix_Multiply_3x3(hat, R, E);
+	}
 	bRet = 1;
 END:
 	Free(pA);
@@ -2255,23 +2487,58 @@ END:
 template int Estimate_E_8Point(double Point_A[8][2], double Point_B[8][2], double T[3 * 4], double E[3 * 3]);
 template<typename _T>int Estimate_E_8Point(_T Point_A[8][2], _T Point_B[8][2], _T T[3 * 4], _T E[3 * 3])
 {//这个比5点法简单很多
+	const int iCount = 8;
+	_T(*pNorm_A)[2], (*pNorm_B)[2], K_A[3], K_B[3], K_A_Inv[3], K_B_Inv[3];
+	_T * pA = (_T*)pMalloc((iCount * 9 + iCount * 2 * 2) * sizeof(_T));
+	if (!pA)
+		return 0;
+
+	pNorm_A = (_T(*)[2])(pA + iCount * 9);
+	pNorm_B = pNorm_A + iCount;
+
+	Normalize_Hartley_sqr_2d(Point_A, iCount, pNorm_A, K_A, K_A_Inv);
+	Normalize_Hartley_sqr_2d(Point_B, iCount, pNorm_B, K_B, K_B_Inv);
+	//Disp((_T*)pNorm_A, iCount, 2, "A");
+	//Disp((_T*)pNorm_B, iCount, 2, "B");
+
 	_T A[8 * 9];
 	for (int i = 0; i < 8; i++)
-		Gen_E_xEy_row(Point_A[i], Point_B[i], &A[i * 9]);
+		Gen_E_xEy_row(pNorm_A[i], pNorm_B[i], &A[i * 9]);
 
 	//Disp(A, 8, 9, "A");
-	int iResult, iSolution_Count;
+	int iResult, iSolution_Count, bRet = 0;
 	_T x[8 * 9];
 	iResult = Solve_Linear_Solution_Construction<_T>(A, 8, 9, NULL, x, &iSolution_Count);
 	if (!iResult || iSolution_Count != 1)
 		return 0;
 	//Disp(x, 1, 9, "x");
+
+	//_T /*R[2][3 * 3], */t0[3], t1[3];	// , T2[4][4 * 4];
+	_T K9[3 * 3], E_raw[3 * 3];
+	//E_raw = K_B' * E * K_A
+	K3_2_K9(K_B, K9);
+	At_x_B(K9, 3, 3, x, 3, E_raw);
+	K3_2_K9(K_A, K9);
+	Matrix_Multiply_3x3(E_raw, K9, E_raw);
+	//Disp(E_raw, 3, 3, "E_raw");
+
 	int iBest_E_Index;
-	if (!(iResult = Elect_E<_T>(Point_A, Point_B, (_T(*)[9])x, 1, T,8, &iBest_E_Index)))
-		return 0;
+	if (!(iResult = Elect_E<_T>(Point_A, Point_B, (_T(*)[9])E_raw, 1, T, 8, &iBest_E_Index)))
+		goto END;
+
 	//Disp(x, 1, 9, "x");
 	if (E)
-		memcpy(E, x, 3 * 3 * sizeof(_T));
+	{//用最优位姿反推一个E出来， E = t^ * R
+		_T R[3 * 3], t[3], hat[3 * 3];    //带个3表示用于三角化
+		Get_R_t(T, R, t);
+		Hat(t, hat);
+		Matrix_Multiply_3x3(hat, R, E);
+	}
+	/*if (E)
+		memcpy(E, E_raw, 3 * 3 * sizeof(_T));*/
+	bRet = 1;
+END:
+	Free(pA);
 	return 1;
 }
 
@@ -2661,16 +2928,14 @@ template<typename _T>void Sample_XY(_T Point_A[][2], _T Point_B[][2], int iPoint
 	return;
 }
 
-template<typename _T>_T Compute_Squared_Sampson_Error(_T M[3 * 3], _T Point_A[][2], _T Point_B[][2], int iCount, _T eps,
-	int* piInlier_Count, int bSwap_Inlier_Forward = 1)
+template double Compute_Squared_Sampson_Error(double M[3 * 3], double Point_A[][2], double Point_B[][2], int iCount, int* piInlier_Count, double eps, int bSwap_Inlier_Forward);
+template<typename _T>_T Compute_Squared_Sampson_Error(_T M[3 * 3], _T Point_A[][2], _T Point_B[][2], int iCount, int* piInlier_Count, _T eps, int bSwap_Inlier_Forward)
 {//计算所有点的
 	int i, j = 0;
 	_T fSum = 0;
 	_T fError, fError_Sum = 0;
 
 	//似乎没啥用
-	//int iSeq_Not_Match_Count = 0;
-	//const int Max_Seq_Nor_Match_Count = 50;
 	for (i = j = 0; i < iCount /*&& iSeq_Not_Match_Count<= Max_Seq_Nor_Match_Count*/; i++)
 	{
 		if ((fError = Sampson(Point_A[i], Point_B[i], M)) <= eps)
@@ -2684,10 +2949,7 @@ template<typename _T>_T Compute_Squared_Sampson_Error(_T M[3 * 3], _T Point_A[][
 			}
 			j++;
 			fError_Sum += fError;
-			//iSeq_Not_Match_Count = 0;
 		}
-		/*else
-			iSeq_Not_Match_Count++;*/
 	}
 
 	*piInlier_Count = j;
@@ -2714,13 +2976,13 @@ int Ransac_Remain_Count(int iInlier, int iSample_Count, int iMin_Sample_Count)
 	return k;
 }
 
-template int Get_Inlier_Count(double Point_A[][2], double Point_B[][2], int iCount, double T[3 * 4], int bSwap_Inlier_Forward, int iMethod, double* pfError, double eps);
-template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], int bSwap_Inlier_Forward, int iMethod, _T* pfError, _T eps)
+template int Get_Inlier_Count(float Point_A[][2], float Point_B[][2], int iCount, float T[3 * 4], int bSwap_Inlier_Forward, int iTriangulate_Method, float* pfError, float eps);
+template int Get_Inlier_Count(double Point_A[][2], double Point_B[][2], int iCount, double T[3 * 4], int bSwap_Inlier_Forward, int iTriangulate_Method, double* pfError, double eps);
+template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int iCount, _T T[3 * 4], int bSwap_Inlier_Forward, int iTriangulate_Method, _T* pfError, _T eps)
 {//对一堆点对就T进行三角化，算出内殿数量
 //三角化方法：0：DLT        SVD法
 //            1: Cramer     克莱姆法
 //            2: Gauss      迭代法
-
 	_T fError, fError_Sum = 0;
 	int iInlier, j;
 	for (j = 0, iInlier = 0; j < iCount; j++)
@@ -2729,12 +2991,12 @@ template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int 
 			printf("here");*/
 
 		_T P[3], P2[3];
-		if (iMethod == 0)
+		if (iTriangulate_Method == 0)
 			Triangulate_DLT<_T>(Point_A[j], Point_B[j], NULL, T, P);
 		else
 		{
 			Triangulate_Cramer<_T>(Point_A[j], Point_B[j], T, P);
-			if (iMethod == 2)
+			if (iTriangulate_Method == 2)
 				Triangulate_Gauss<_T>(Point_A[j], Point_B[j], NULL, T, P);
 		}
 
@@ -2764,84 +3026,91 @@ template<typename _T>int Get_Inlier_Count(_T Point_A[][2], _T Point_B[][2], int 
 		*pfError = fError_Sum;
 	return iInlier;
 }
-template int Ransac_E(double Point_A[][2], double Point_B[][2], int iCount, double T[3 * 4], double E[3 * 3], int bUse_5_Point, int bPoint_In_Place);
+
+template int Ransac_E(float Point_A[][2], float Point_B[][2], int iCount, float T[3 * 4], float E[3 * 3], int* piCount, float* pfError, int bUse_5_Point, int bPoint_In_Place);
+template int Ransac_E(double Point_A[][2], double Point_B[][2], int iCount, double T[3 * 4], double E[3 * 3], int* piCount, double* pfError, int bUse_5_Point, int bPoint_In_Place);
 template<typename _T>int Ransac_E(_T Point_A[][2], _T Point_B[][2], int iCount,
-	_T T[3 * 4], _T E[3 * 3], int bUse_5_Point, int bPoint_In_Place)
+	_T T[3 * 4], _T E[3 * 3], int *piCount, _T *pfError, int bUse_5_Point, int bPoint_In_Place)
 {
 	//为了不动原来点对，此处要赋值点对
 	_T(*pDup_Point_A)[2], (*pDup_Point_B)[2];
+
 	if (bPoint_In_Place)
 	{
 		pDup_Point_A = Point_A;
 		pDup_Point_B = Point_B;
-	}
-	else
+	}else
 	{
-		pDup_Point_A = (_T(*)[2])pMalloc(iCount * 2 * 2 * sizeof(_T));
+		pDup_Point_A = (_T(*)[2])pMalloc(iCount * 2 * 2 * 2 * sizeof(_T));
 		pDup_Point_B = pDup_Point_A + iCount;
 		memcpy(pDup_Point_A, Point_A, iCount * 2 * sizeof(_T));
 		memcpy(pDup_Point_B, Point_B, iCount * 2 * sizeof(_T));
 	}
 
-	const int iMax_Seq_Dup_Trail = 20, iHalf_Count = (iCount + 1) >> 1;
+	const int iMax_Seq_Dup_Trail = 50, iHalf_Count = (iCount + 1) >> 1	;
 	const _T eps = 0.005208333333333333f * 0.005208333333333333f;
 
 	int iIter, iRemain_Iter_Count = 0xFFFFFF, iSeq_Dup_Max_Inlier = 0;
-
-	int iResult, iInlier, iMax_Inlier = 0, iSample_Count = bUse_5_Point ? 5 : 8;
+	int iResult, iInlier,iMax_Inlier = 0, iSample_Count = bUse_5_Point ? 5 : 8;
 	_T fError, fMin_Error = MAX_FLOAT;
-	_T Best_E[3 * 3], T1[3 * 4], E1[3 * 3];
+	_T Best_E[3 * 3], Best_T[3*4],T1[3 * 4], E1[3 * 3];
 
 	//******************第一步，粗估计**********************************************************/
 	for (iIter = 0; iIter < iRemain_Iter_Count && 
-		iMax_Inlier< iHalf_Count &&			//良性数据能加快跳出
+		//(iIter<= iMax_Iter_Count && !iMax_Inlier) && 
+		//iMax_Inlier< iHalf_Count &&			//良性数据能加快跳出
 		iSeq_Dup_Max_Inlier < iMax_Seq_Dup_Trail; iIter++)
 	{
 		//随机选出一组点对
 		Sample_XY(pDup_Point_A, pDup_Point_B, iCount, iSample_Count);
-
 		if (bUse_5_Point)
-		{
-			if (!(iResult = Estimate_E_T_5Point(pDup_Point_A, pDup_Point_B, T1, E1)))
-				continue;
-		}else
-		{
-			if (!(iResult = Estimate_E_8Point<_T>(pDup_Point_A, pDup_Point_B, T1, E1)))
-				continue;
-		}
+			iResult = Estimate_E_T_5Point(pDup_Point_A, pDup_Point_B, T1, E1);
+		else
+			iResult = Estimate_E_8Point<_T>(pDup_Point_A, pDup_Point_B, T1, E1);
+		
+		iSeq_Dup_Max_Inlier++;
+		if (!iResult)
+			continue;
 
-		fError = Compute_Squared_Sampson_Error(E1, pDup_Point_A, pDup_Point_B, iCount, eps, &iInlier, 0);
+		fError = Compute_Squared_Sampson_Error(E1, pDup_Point_A, pDup_Point_B, iCount, &iInlier, eps, 1);
 		if (iInlier < iSample_Count)
 			continue;
 
-		int iPre_Max_Inlier = iMax_Inlier;
 		if ((iInlier > iMax_Inlier) ||
 			(iInlier == iMax_Inlier && fError < fMin_Error))
 		{
-			memcpy(Best_E, E1, 3 * 3 * sizeof(_T));
-			fMin_Error = fError;
-			iMax_Inlier = iInlier;
-			iSeq_Dup_Max_Inlier = 0;
+			iInlier = Get_Inlier_Count(pDup_Point_A, pDup_Point_B, iCount, T1, 1, 2, &fError);
+			if ((iInlier > iMax_Inlier) ||
+				(iInlier == iMax_Inlier && fError < fMin_Error))
+			{
+				memcpy(Best_E, E1, 3 * 3 * sizeof(_T));
+				memcpy(Best_T, T1, 3 * 4 * sizeof(_T));
+				fMin_Error = fError;
+				iMax_Inlier = iInlier;
+				iSeq_Dup_Max_Inlier = 0;	//可以归零了
+			}
 			//fError = Compute_Squared_Sampson_Error(Best_E, pDup_Point_A, pDup_Point_B, iCount, eps, &iInlier, 0);
 		}
-		else if (iPre_Max_Inlier == iMax_Inlier)    //若然连续多次冲不破最大内点数，则跳出
-			iSeq_Dup_Max_Inlier++;
 				
-		//printf("Inlier:%d\n", iPre_Max_Inlier);
+		////printf("Inlier:%d\n", iPre_Max_Inlier);
 		iRemain_Iter_Count = Ransac_Remain_Count(iMax_Inlier, iCount, iSample_Count);
 	}
 	//******************第一步，粗估计**********************************************************/
 
 	//升起全部Inlier
-	fError = Compute_Squared_Sampson_Error(Best_E, pDup_Point_A, pDup_Point_B, iCount, eps, &iInlier);
+	//fError = Compute_Squared_Sampson_Error(Best_E, pDup_Point_A, pDup_Point_B, iCount, eps, &iInlier);
+	iInlier = Get_Inlier_Count(pDup_Point_A, pDup_Point_B, iCount, Best_T, 1, 2, &fError);
+	if (iInlier<20)
+		goto END;
 
 	//******************************第二步，精估计，步步三角化***********************************/
-	iMax_Inlier = 0;
-	fMin_Error = MAX_FLOAT;
+	//iMax_Inlier = 0;
+	//fMin_Error = MAX_FLOAT;
 	for (int i = 0; i < 5; i++)
 	{
 		if (!(iResult = Estimate_E_T_nPoint<_T>(pDup_Point_A, pDup_Point_B, iInlier, &iInlier, T1, E1)))
 			break;
+
 		iInlier = Get_Inlier_Count(pDup_Point_A, pDup_Point_B, iCount, T1, 1, 2, &fError);
 		printf("Inlier:%d average:%f\n", iInlier, fError / iInlier);
 		if (iMax_Inlier < iInlier ||
@@ -2849,18 +3118,41 @@ template<typename _T>int Ransac_E(_T Point_A[][2], _T Point_B[][2], int iCount,
 		{
 			iMax_Inlier = iInlier;
 			fMin_Error = fError;
-			if (T)
-				memcpy(T, T1, 3 * 4 * sizeof(_T));
-			if (E)
-				memcpy(E, E1, 3 * 3 * sizeof(_T));
+			memcpy(Best_T,T1, 3 * 4 * sizeof(_T));
+			memcpy(Best_E, E1, 3 * 3 * sizeof(_T));
 		}else
 			break;
 	}
 	//******************************第二步，精估计，步步三角化***********************************/
 
-	if (!bPoint_In_Place)
-		Free(pDup_Point_A);
-	return iMax_Inlier >= iSample_Count ? 1 : 0;
+END:
+	if(iResult = iMax_Inlier >= iSample_Count ? 1 : 0)
+	{
+		if (E)
+			memcpy(E, Best_E, 3 * 3 * sizeof(_T));
+		if (T)
+			memcpy(T, Best_T, 3 * 4 * sizeof(_T));
+		if (!bPoint_In_Place)
+			Free(pDup_Point_A);
+		if (piCount)
+			*piCount = iMax_Inlier;
+		if (pfError)
+			*pfError = fMin_Error;
+	}else
+	{
+		if (E)
+			memset(E, 0, 3 * 3 * sizeof(_T));
+		if (T)
+			memset(T, 0, 3 * 4 * sizeof(_T));
+		if (!bPoint_In_Place)
+			Free(pDup_Point_A);
+		if (piCount)
+			*piCount = 0;
+		if (pfError)
+			*pfError = 0;
+	}
+
+	return iResult;
 }
 
 template<typename _T>_T Computer_H_Error(_T H[3 * 3], _T Point_A[2], _T Point_B[2])
@@ -3010,17 +3302,18 @@ END:
 }
 template int Ransac_H(double Point_A[][2], double Point_B[][2], int iCount, double T[3 * 4], double H[3 * 3], int bPoint_In_Place, double eps);
 template<typename _T>int Ransac_H(_T Point_A[][2], _T Point_B[][2], int iCount,	_T T[3 * 4], _T H[3 * 3], int bPoint_In_Place, _T eps)
-{
+{//注意，业界的误差的接受程度为3像素，此处是归一化平面，故此要转换
 	//为了不动原来点对，此处要赋值点对
 	_T(*pDup_Point_A)[2], (*pDup_Point_B)[2];
 	if (bPoint_In_Place)
 	{
 		pDup_Point_A = Point_A;
 		pDup_Point_B = Point_B;
-	}
-	else
+	}else
 	{
 		pDup_Point_A = (_T(*)[2])pMalloc(iCount * 2 * 2 * sizeof(_T));
+		if (!pDup_Point_A)
+			return 0;
 		pDup_Point_B = pDup_Point_A + iCount;
 		memcpy(pDup_Point_A, Point_A, iCount * 2 * sizeof(_T));
 		memcpy(pDup_Point_B, Point_B, iCount * 2 * sizeof(_T));
@@ -3265,7 +3558,7 @@ template<typename _T>static void Trianglate_Get_H_JtE(_T P1[3], _T Pn1[2], _T R1
 template int Triangulate_Gauss(double Pn1[3], double Pn2[3], double T1[4 * 4], double T2[4 * 4], double P[3]);
 template<typename _T>int Triangulate_Gauss(_T Pn1[3], _T Pn2[3], _T T1[4 * 4], _T T2[4 * 4], _T P[3])
 {//迭代法，由于找不到数据证明它有用，暂时不优化了。留待日后再搞
-	_T fError, fPre_Error = MAX_FLOAT, fError_Delta, eps = 1e-10;
+	_T fError, fPre_Error = MAX_FLOAT, fError_Delta, eps = (_T)1e-10;
 	const int iMax_Iter = 30;
 	int bRet = 0, iIter, iResult;
 
@@ -3319,7 +3612,7 @@ template<typename _T>int Triangulate_Gauss(_T Pn1[3], _T Pn2[3], _T T1[4 * 4], _
 template void Test_E(double E[3 * 3], double P1[5][2], double P2[5][2], int iCount);
 template<typename _T> void Test_E(_T E[3 * 3], _T P1[5][2], _T P2[5][2], int iCount)
 {
-	const _T eps = 1e-10;
+	_T eps = 1e-10;
 	_T Temp[3], fTotal = 0;
 	for (int i = 0; i < iCount; i++)
 	{
@@ -3362,6 +3655,14 @@ template<typename _T> void Test_E(_T E[3 * 3], _T P1[5][2], _T P2[5][2], int iCo
 	Disp(Result, 3, 3, "2EE'E - trace(EE')E");
 	if (fGet_Mod(Result, 9) > eps)
 		printf("过不了迹约束:%e\n", fGet_Mod(Result, 9));
+
+	//最后求Sampson 距离
+	int iInlier = 0;
+	eps = 0.005208333333333333f * 0.005208333333333333f;
+	fTotal = Compute_Squared_Sampson_Error(E, P1, P2, iCount, &iInlier,eps);
+	if (iInlier < iCount / 2)
+		printf("过不了Sampson误差关，Inlier:%d\n", iInlier);
+
 	return;
 }
 
@@ -3401,3 +3702,50 @@ template<typename _T>_T Test_Triangulate(_T T[4 * 4], _T Point_A[][2], _T Point_
 	return fTotal;
 }
 //*****************************三种三角化*********************************/
+
+//****************************两图几何************************************/
+template<typename _T>int Get_2_Image_Pose(_T A[][2], _T B[][2], int iCount,
+	_T K[4], _T T[3 * 4], int* piCount = NULL, _T* pfError = NULL)
+{
+	//归一化
+	uv_2_Norm(A, iCount, K, 4, A);
+	uv_2_Norm(B, iCount, K, 4, B);
+
+	_T E[3 * 3];
+	int iResult = Ransac_E(A, B, iCount, T, E, piCount, pfError);
+	if (iResult && A)
+		Get_Inlier_Count(A, B, iCount, T);
+
+	return iResult;
+}
+
+template int Get_2_Image_Pose_by_File(const char File_A[], const char File_B[], float K[4],
+	float T[3 * 4], float(**ppPoint_A)[2], float(**ppPoint_B)[2], int* piCount, float* pfError, int o_min, float fPeak_Thresh);;
+template int Get_2_Image_Pose_by_File(const char File_A[], const char File_B[], double K[4],
+	double T[3 * 4], double(**ppPoint_A)[2], double(**ppPoint_B)[2], int* piCount, double* pfError, int o_min, float fPeak_Thresh);
+template<typename _T>int Get_2_Image_Pose_by_File(const char File_A[], const char File_B[], _T K[4],
+	_T T[3 * 4], _T(**ppPoint_A)[2], _T(**ppPoint_B)[2], int* piCount, _T* pfError, int o_min, float fPeak_Thresh)
+{
+	_T(*A)[2] = NULL, (*B)[2] = NULL;
+	int iResult, iCount, bRet = 0;
+	if (!(iResult = Sift_Match_2_Image<_T>(File_A, File_B, &A, &B, &iCount, o_min, fPeak_Thresh)))
+		goto END;
+
+	//if (iCount < 20)
+		//goto END;
+
+	if (!(iResult = Get_2_Image_Pose<_T>(A, B, iCount, K, T, piCount, pfError)))
+		goto END;
+
+	if (ppPoint_A)
+		*ppPoint_A = A;
+	if (ppPoint_B)
+		*ppPoint_B = B;
+	bRet = 1;
+END:
+	if (!ppPoint_A)
+		Free(A);
+	return bRet;
+}
+//****************************两图几何************************************/
+

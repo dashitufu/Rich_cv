@@ -468,6 +468,18 @@ int bGet_Value(char* pText, int iSize, const char* pKey, char* pValue)
 	return 1;
 }
 
+template int Comppare_Raw(float* A, float* B, unsigned int iSize, float eps);
+template<typename _T>int Comppare_Raw(_T* A, _T* B, unsigned int iSize, _T eps)
+{
+	for (unsigned int i = 0; i < iSize; i++)
+		if (Abs(A[i] - B[i])!=0 && Abs(A[i] - B[i])/(Abs(A[i] + B[i])/2) > eps)
+		{
+			printf("Error:%d %f %f\n", i,A[i], B[i]);
+			return 0;
+		}
+	return 1;
+}
+
 int bStricmp(char* pStr_0, char* pStr_1)
 {//由于Linux与Windows不一致，被迫搞一个同一无大小写比较函数
 #ifndef WIN32
@@ -789,7 +801,7 @@ template<typename _T>static void _Get_Nearest_Point(KD_Tree_3D<_T>* poTree, int 
 			fDistance = (float)fGet_Distance(oPoint.m_Pos, Pos, 3);
 			if (fDistance < oNeighbour.m_fDistance)
 			{	//swap
-				oNeighbour.m_fDistance = fDistance;
+				oNeighbour.m_fDistance =(_T)fDistance;
 				oNeighbour.m_iIndex = i;
 			}
 		}
@@ -834,7 +846,7 @@ template<typename _T>void Get_Nearest_Point(KD_Tree_3D<_T>* poTree, _T Pos[3], _
 	//Get_Nearest_Point(poTree, poTree->m_iRoot, *poPos, poNeighbour, Dist, 0);
 	float Dist[3] = { 0.f,0.f,0.f };
 	Neighbour_Item<_T> oNeighbour;
-	oNeighbour.m_fDistance = MAX_FLOAT;
+	oNeighbour.m_fDistance = (_T)0xFFFFFFFF;	// (_T)MAX_FLOAT;
 	_Get_Nearest_Point<_T>(poTree, poTree->m_iRoot, Pos, &oNeighbour, Dist, 0.f);
 
 	KD_Point_3D<_T> oPoint = poTree->m_pPoint[oNeighbour.m_iIndex];
@@ -842,7 +854,7 @@ template<typename _T>void Get_Nearest_Point(KD_Tree_3D<_T>* poTree, _T Pos[3], _
 	if (piOrg_Index)
 		*piOrg_Index = oPoint.m_iOrg_Index;
 	if (pfDist)
-		*pfDist = oNeighbour.m_fDistance;
+		*pfDist = (float)oNeighbour.m_fDistance;
 	return;
 }
 
@@ -867,7 +879,7 @@ template<typename _T>void Get_Nearest_Point_Ref(KD_Point_3D<_T> Point[], int iPo
 	}
 	memcpy(Neighbour, Point[oNeighbour.m_iIndex].m_Pos, 3 * sizeof(_T));
 	if (pfDist)
-		*pfDist = oNeighbour.m_fDistance;
+		*pfDist = (float)oNeighbour.m_fDistance;
 	if (piOrg_Index)
 		*piOrg_Index = Point[oNeighbour.m_iIndex].m_iOrg_Index;
 	if (piNew_Index)
@@ -922,6 +934,34 @@ int bExpand(void* p, unsigned int iSize)
 		bRet = bExpand(&oMem_Mgr.oMem_Mgr, p, iSize);
 	else
 		bRet = 1;
+	Unlock_Semaphore_For_Thread(&oMem_Mgr.m_oS);
+	return bRet;
+}
+
+int bExpand_Ex(void** pp, unsigned int iSize)
+{
+	Lock_Semaphore_For_Thread(&oMem_Mgr.m_oS);
+	int bRet = 0;
+	void* p = *pp;
+	bRet = bExpand(&oMem_Mgr.oMem_Mgr, p, iSize);
+	if (!bRet)
+	{
+		unsigned long long iOrg_Size = iGet_Size_by_p(&oMem_Mgr.oMem_Mgr, p);
+		if (iOrg_Size)
+		{
+			Free(&oMem_Mgr.oMem_Mgr, p);
+			if ((p = pMalloc(&oMem_Mgr.oMem_Mgr, iSize)))
+			{
+				memcpy(p, *pp, iOrg_Size);
+				*pp = p;
+				bRet = 1;
+			}
+		}else
+		{
+			printf("Fail to get size in bExpand_Ex\n");
+			bRet = 0;
+		}
+	}
 	Unlock_Semaphore_For_Thread(&oMem_Mgr.m_oS);
 	return bRet;
 }
@@ -2681,3 +2721,16 @@ template<typename _T>void Free_Queue(Queue<_T>* poQueue)
 	*poQueue = {};
 }
 /*******************************简单队列****************************/
+
+unsigned int iGet_Hash_Code(unsigned char* pBuffer, int iSize)
+{
+	unsigned int iCode = 0;
+	int i, iSize_4 = (iSize >> 2) << 2;
+	for (i = 0; i < iSize; i += 4)
+		iCode ^= *(unsigned int*)&pBuffer[i];
+	if (iSize != iSize_4)
+		for (; i < iSize; i++)
+			iCode = iCode ^ (pBuffer[i] << ((iSize - i) * 8));
+	//iCode ^= ((*(unsigned int*) & pBuffer[i]) >> iShift) << iShift;
+	return iCode;
+}
